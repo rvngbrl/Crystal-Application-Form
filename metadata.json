@@ -1,0 +1,6 @@
+{
+  "name": "Crystal Shipping Inc. - Seafarer Application Portal",
+  "description": "Seafarer Application Portal for Crystal Shipping Inc. featuring Terms & Conditions verification, application guide, and multi-step seafarer form.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
