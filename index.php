@@ -32,7 +32,7 @@ $todayDate = date('Y-m-d'); // used to cap date pickers so tomorrow/future dates
     <style>
         body { font-family: 'Plus Jakarta Sans', sans-serif; }
         .bg-ocean-port {
-            background-image: linear-gradient(to bottom, rgba(15, 23, 42, 0.65), rgba(15, 23, 42, 0.75)), url('src/assets/images/cargo_ship.jpg');
+            background-image: linear-gradient(to bottom, rgba(15, 23, 42, 0.65), rgba(15, 23, 42, 0.75)), url('src/assets/images/application-background.jpg');
             background-size: cover;
             background-position: center;
             background-attachment: fixed;
