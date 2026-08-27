@@ -354,58 +354,77 @@ $todayDate = date('Y-m-d'); // used to cap date pickers so tomorrow/future dates
                             BIRTH & ADDRESS
                         </h3>
                         <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                            <div>
-                                <label class="block text-xs font-bold text-slate-700 uppercase mb-1">DATE OF BIRTH <span class="text-red-600">*</span></label>
-                                <input type="date" id="dobInput" name="dob" required max="<?php echo $todayDate; ?>" onchange="calcAge()" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-xs font-semibold focus:ring-2 focus:ring-blue-500 outline-none">
-                                <p class="text-[10px] text-slate-500 mt-1">Applicant must be at least 18 years old.</p>
-                            </div>
-                            <script>
-                            // Restrict the date picker itself to only allow birthdates 18+ years ago
-                            document.addEventListener('DOMContentLoaded', function() {
-                                const dobInput = document.getElementById('dobInput');
-                                const today = new Date();
-                                const eighteenYearsAgo = new Date(today.getFullYear() - 18, today.getMonth(), today.getDate());
-                                const maxDate = eighteenYearsAgo.toISOString().split('T')[0];
-                                dobInput.setAttribute('max', maxDate);
-                            });
-
-                            function calcAge() {
-                                const dobInput = document.getElementById('dobInput');
-                                const errorMsg = document.getElementById('age_error');
-                                const dob = new Date(dobInput.value);
-                                const today = new Date();
-
-                                let age = today.getFullYear() - dob.getFullYear();
-                                const monthDiff = today.getMonth() - dob.getMonth();
-                                if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) {
-                                    age--;
-                                }
-
-                                if (age < 18 || isNaN(age)) {
-                                    errorMsg.classList.remove('hidden');
-                                    dobInput.setCustomValidity('You must be at least 18 years old to apply.');
-                                } else {
-                                    errorMsg.classList.add('hidden');
-                                    dobInput.setCustomValidity('');
-                                }
-
-                                return age;
-                            }
-                            </script>
-                            
-                            <div>
-                                <label class="block text-xs font-bold text-slate-700 uppercase mb-1">PLACE OF BIRTH <span class="text-red-600">*</span></label>
-                                <input type="text" name="pob" required placeholder="Enter Place of Birth" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-xs font-semibold focus:ring-2 focus:ring-blue-500 outline-none">
-                            </div>
-                            <div>
-                                <label class="block text-xs font-bold text-slate-700 uppercase mb-1">AGE</label>
-                                <input type="text" id="ageField" name="age" readonly placeholder="[AUTO CALCULATED AGE]" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-slate-100 text-xs font-semibold text-slate-600 outline-none">
-                            </div>
-                            <div class="sm:col-span-3">
-                                <label class="block text-xs font-bold text-slate-700 uppercase mb-1">CURRENT ADDRESS <span class="text-red-600">*</span></label>
-                                <input type="text" name="address" required placeholder="House No., Street, Barangay, City, Province" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-xs font-semibold focus:ring-2 focus:ring-blue-500 outline-none">
-                            </div>
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 uppercase mb-1">DATE OF BIRTH <span class="text-red-600">*</span></label>
+                            <input type="date" id="dobInput" name="dob" required max="<?php echo $todayDate; ?>" onchange="calcAge()" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-xs font-semibold focus:ring-2 focus:ring-blue-500 outline-none">
+                            <p class="text-[10px] text-slate-500 mt-1">Applicant must be at least 18 years old.</p>
+                            <p id="age_error" class="text-red-600 text-xs font-semibold mt-1 hidden">⚠ You must be at least 18 years old to apply.</p>
                         </div>
+
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 uppercase mb-1">PLACE OF BIRTH <span class="text-red-600">*</span></label>
+                            <input type="text" name="pob" required placeholder="Enter Place of Birth" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-xs font-semibold focus:ring-2 focus:ring-blue-500 outline-none">
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 uppercase mb-1">AGE</label>
+                            <input type="text" id="ageField" name="age" readonly placeholder="[AUTO CALCULATED AGE]" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-slate-100 text-xs font-semibold text-slate-600 outline-none">
+                        </div>
+
+                        <div class="sm:col-span-3">
+                            <label class="block text-xs font-bold text-slate-700 uppercase mb-1">CURRENT ADDRESS <span class="text-red-600">*</span></label>
+                            <input type="text" name="address" required placeholder="House No., Street, Barangay, City, Province" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-xs font-semibold focus:ring-2 focus:ring-blue-500 outline-none">
+                        </div>
+                    </div>
+
+                    <script>
+                    document.addEventListener('DOMContentLoaded', function() {
+                        const dobInput = document.getElementById('dobInput');
+                        const today = new Date();
+                        const eighteenYearsAgo = new Date(today.getFullYear() - 18, today.getMonth(), today.getDate());
+                        const maxDate = eighteenYearsAgo.toISOString().split('T')[0];
+                        dobInput.setAttribute('max', maxDate);
+                    });
+
+                    function calcAge() {
+                        const dobInput = document.getElementById('dobInput');
+                        const errorMsg = document.getElementById('age_error');
+                        const ageField = document.getElementById('ageField');
+                        const dob = new Date(dobInput.value);
+                        const today = new Date();
+
+                        let age = today.getFullYear() - dob.getFullYear();
+                        const monthDiff = today.getMonth() - dob.getMonth();
+                        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) {
+                            age--;
+                        }
+
+                        if (!dobInput.value || isNaN(age)) {
+                            ageField.value = '';
+                            ageField.classList.remove('border-red-500', 'bg-red-50', 'text-red-700');
+                            ageField.classList.add('bg-slate-100', 'text-slate-600');
+                            errorMsg.classList.add('hidden');
+                            dobInput.setCustomValidity('');
+                            return age;
+                        }
+
+                        ageField.value = age + ' yrs old';
+
+                        if (age < 18) {
+                            errorMsg.classList.remove('hidden');
+                            dobInput.setCustomValidity('You must be at least 18 years old to apply.');
+                            ageField.classList.add('border-red-500', 'bg-red-50', 'text-red-700');
+                            ageField.classList.remove('bg-slate-100', 'text-slate-600');
+                        } else {
+                            errorMsg.classList.add('hidden');
+                            dobInput.setCustomValidity('');
+                            ageField.classList.remove('border-red-500', 'bg-red-50', 'text-red-700');
+                            ageField.classList.add('bg-slate-100', 'text-slate-600');
+                        }
+
+                        return age;
+                    }
+                    </script>
                     </div>
 
                     <!-- Contact Information -->
@@ -420,8 +439,29 @@ $todayDate = date('Y-m-d'); // used to cap date pickers so tomorrow/future dates
                             </div>
                             <div>
                                 <label class="block text-xs font-bold text-slate-700 uppercase mb-1">CONTACT NUMBER <span class="text-red-600">*</span></label>
-                                <input type="tel" name="phone" required placeholder="e.g. 09171234567" inputmode="numeric" pattern="[0-9]*" maxlength="15" oninput="this.value = this.value.replace(/[^0-9]/g, '');" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-xs font-semibold focus:ring-2 focus:ring-blue-500 outline-none">
+                                <input type="tel" name="phone" id="phoneInput" required placeholder="e.g. 09171234567"
+                                    inputmode="numeric"
+                                    pattern="[0-9]{11}"
+                                    maxlength="11"
+                                    aria-describedby="phone_error"
+                                    oninput="this.value = this.value.replace(/[^0-9]/g, '').slice(0, 11); validatePhone(this);"
+                                    onblur="validatePhone(this)"
+                                    class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-xs font-semibold focus:ring-2 focus:ring-blue-500 outline-none">
+                                <p id="phone_error" class="text-red-600 text-xs font-semibold mt-1 hidden">⚠ Contact number must be exactly 11 digits.</p>
                             </div>
+
+                            <script>
+                            function validatePhone(input) {
+                                const errorMsg = document.getElementById('phone_error');
+                                if (input.value.length > 0 && input.value.length !== 11) {
+                                    errorMsg.classList.remove('hidden');
+                                    input.setCustomValidity('Contact number must be exactly 11 digits.');
+                                } else {
+                                    errorMsg.classList.add('hidden');
+                                    input.setCustomValidity('');
+                                }
+                            }
+                            </script>
                             <div>
                                 <label class="block text-xs font-bold text-slate-700 uppercase mb-1">CIVIL STATUS <span class="text-red-600">*</span></label>
                                 <select name="civil_status" required class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-xs font-semibold focus:ring-2 focus:ring-blue-500 outline-none">
@@ -606,24 +646,19 @@ $todayDate = date('Y-m-d'); // used to cap date pickers so tomorrow/future dates
                                 <label class="block text-xs font-bold text-slate-700 uppercase mb-1">E-REGISTRATION NO.</label>
                                 <input type="text" name="e_reg_no" placeholder="Enter E-Reg Number" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs">
                             </div>
-                        </div>
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>
                                 <label class="block text-xs font-bold text-slate-700 uppercase mb-1">SID NO.</label>
-                                <input type="text" name="e_reg_no" placeholder="Enter E-Reg Number" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs">
+                                <input type="text" name="sid_no" placeholder="Enter SID Number" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs">
                             </div>
                         </div>    
                     </div>
 
                     <!-- Training Certificates -->
-                    <div class="space-y-4">
+                   <div class="space-y-4">
                         <div class="flex items-center justify-between">
                             <h3 class="font-black text-slate-900 text-sm uppercase tracking-wider border-l-4 border-slate-900 pl-3">
                                 TRAINING CERTIFICATES
                             </h3>
-                            <button type="button" onclick="addTrainingRow()" class="bg-blue-600 text-white font-bold text-xs px-4 py-1.5 rounded-lg hover:bg-blue-700">
-                                + ADD CERTIFICATE
-                            </button>
                         </div>
                         <div id="trainingContainer" class="space-y-3">
                             <div class="grid grid-cols-1 sm:grid-cols-4 gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200">
@@ -632,6 +667,13 @@ $todayDate = date('Y-m-d'); // used to cap date pickers so tomorrow/future dates
                                 <input type="date" name="training_issue[]" class="px-3 py-2 rounded-lg border border-slate-300 text-xs">
                                 <input type="date" name="training_expiry[]" class="px-3 py-2 rounded-lg border border-slate-300 text-xs">
                             </div>
+                        </div>
+
+                        <div class="flex items-center justify-between">
+                            <button type="button" onclick="addTrainingRow()" id="addTrainingBtn" class="bg-blue-600 text-white font-bold text-xs px-4 py-1.5 rounded-lg hover:bg-blue-700">
+                                + ADD CERTIFICATE
+                            </button>
+                            <p id="training_limit_msg" class="text-red-600 text-xs font-semibold hidden">Maximum of 5 certificates reached.</p>
                         </div>
                     </div>
 
@@ -1004,36 +1046,6 @@ $todayDate = date('Y-m-d'); // used to cap date pickers so tomorrow/future dates
             goToStep(nextStepId);
         }
 
-        function calcAge() {
-            const dobInput = document.getElementById('dobInput');
-            const ageField = document.getElementById('ageField');
-            const dob = dobInput.value;
-
-            if (!dob) {
-                ageField.value = '';
-                dobInput.setCustomValidity('');
-                return;
-            }
-
-            const birthDate = new Date(dob);
-            const today = new Date();
-            let age = today.getFullYear() - birthDate.getFullYear();
-            const m = today.getMonth() - birthDate.getMonth();
-            if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
-                age--;
-            }
-
-            if (age < 18) {
-                ageField.value = age >= 0 ? age + ' yrs old' : '';
-                ageField.classList.add('text-red-600', 'border-red-400', 'bg-red-50');
-                dobInput.setCustomValidity('Applicant must be at least 18 years old to apply.');
-            } else {
-                ageField.value = age + ' yrs old';
-                ageField.classList.remove('text-red-600', 'border-red-400', 'bg-red-50');
-                dobInput.setCustomValidity('');
-            }
-        }
-
         function previewPhoto(event) {
             const input = event.target;
             const file = input.files[0];
@@ -1063,117 +1075,184 @@ $todayDate = date('Y-m-d'); // used to cap date pickers so tomorrow/future dates
             reader.readAsDataURL(file);
         }
 
-        function addTrainingRow() {
-            const container = document.getElementById('trainingContainer');
-            const div = document.createElement('div');
-            div.className = 'grid grid-cols-1 sm:grid-cols-4 gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200';
-            div.innerHTML = `
-                <input type="text" name="training_name[]" placeholder="Certificate Name" class="px-3 py-2 rounded-lg border border-slate-300 text-xs">
-                <input type="text" name="training_no[]" placeholder="Certificate No." class="px-3 py-2 rounded-lg border border-slate-300 text-xs">
-                <input type="date" name="training_issue[]" class="px-3 py-2 rounded-lg border border-slate-300 text-xs">
-                <input type="date" name="training_expiry[]" class="px-3 py-2 rounded-lg border border-slate-300 text-xs">
-            `;
-            container.appendChild(div);
-        }
+        const MAX_TRAINING_ROWS = 5;
 
-        function addExperienceRow() {
+            function addTrainingRow() {
+                const container = document.getElementById('trainingContainer');
+                const rowCount = container.children.length;
 
-            const container = document.getElementById('experienceContainer');
+                if (rowCount >= MAX_TRAINING_ROWS) {
+                    document.getElementById('training_limit_msg').classList.remove('hidden');
+                    document.getElementById('addTrainingBtn').disabled = true;
+                    document.getElementById('addTrainingBtn').classList.add('opacity-50', 'cursor-not-allowed');
+                    return;
+                }
 
-            // Validate the current (last) experience before adding another
-            const errorMsg = document.getElementById("experienceError");
-            errorMsg.classList.add("hidden");
+                const div = document.createElement('div');
+                div.className = 'relative grid grid-cols-1 sm:grid-cols-4 gap-3 bg-slate-50 p-3 pt-7 rounded-xl border border-slate-200';
+                div.innerHTML = `
+                    <input type="text" name="training_name[]" placeholder="Certificate Name" class="px-3 py-2 rounded-lg border border-slate-300 text-xs">
+                    <input type="text" name="training_no[]" placeholder="Certificate No." class="px-3 py-2 rounded-lg border border-slate-300 text-xs">
+                    <input type="date" name="training_issue[]" class="px-3 py-2 rounded-lg border border-slate-300 text-xs">
+                    <input type="date" name="training_expiry[]" class="px-3 py-2 rounded-lg border border-slate-300 text-xs">
+                `;
 
-            const lastExperience = container.lastElementChild;
-
-            if (lastExperience) {
-                const fields = lastExperience.querySelectorAll("input, select, textarea");
-
-                for (const field of fields) {
-                    if (field.value.trim() === "") {
-                        errorMsg.classList.remove("hidden");
-                        field.focus();
-                        return;
+                // Add a remove button, positioned top-right of the row
+                const removeBtn = document.createElement('button');
+                removeBtn.type = 'button';
+                removeBtn.innerHTML = '✕ Remove';
+                removeBtn.className = 'absolute top-2 right-3 text-red-600 text-xs font-bold hover:underline';
+                removeBtn.onclick = function() {
+                    if (confirm('Are you sure you want to remove this certificate?')) {
+                    div.remove();
+                    checkTrainingLimit();
                     }
+                };
+                div.appendChild(removeBtn);
+
+                container.appendChild(div);
+                checkTrainingLimit();
+            }
+
+            function checkTrainingLimit() {
+                const container = document.getElementById('trainingContainer');
+                const rowCount = container.children.length;
+                const addBtn = document.getElementById('addTrainingBtn');
+                const limitMsg = document.getElementById('training_limit_msg');
+
+                if (rowCount >= MAX_TRAINING_ROWS) {
+                    addBtn.disabled = true;
+                    addBtn.classList.add('opacity-50', 'cursor-not-allowed');
+                    limitMsg.classList.remove('hidden');
+                } else {
+                    addBtn.disabled = false;
+                    addBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                    limitMsg.classList.add('hidden');
                 }
             }
 
-            const count = container.children.length + 1;
-            const div = document.createElement('div');
-            div.className = 'bg-slate-50 p-5 rounded-2xl border border-slate-200 space-y-4';
+            function addExperienceRow() {
 
-            div.innerHTML = `
-                <p class="text-xs font-black text-blue-700 uppercase">
-                    EXPERIENCE #${count} <span class="text-red-600">*</span>
-                </p>
+                const container = document.getElementById('experienceContainer');
 
-                <div class="grid grid-cols-1 sm:grid-cols-4 gap-4 text-xs">
+                // Validate the current (last) experience before adding another
+                const errorMsg = document.getElementById("experienceError");
+                errorMsg.classList.add("hidden");
 
-                    <div>
-                        <label class="block font-bold text-slate-700 mb-1">PRINCIPAL NAME</label>
-                        <input type="text" name="principal_name[]" placeholder="e.g. Evergreen" class="w-full p-2.5 rounded-xl border border-slate-300">
+                const lastExperience = container.lastElementChild;
+
+                if (lastExperience) {
+                    const fields = lastExperience.querySelectorAll("input, select, textarea");
+
+                    for (const field of fields) {
+                        if (field.value.trim() === "") {
+                            errorMsg.classList.remove("hidden");
+                            field.focus();
+                            return;
+                        }
+                    }
+                }
+
+                const count = container.children.length + 1;
+                const div = document.createElement('div');
+                div.className = 'bg-slate-50 p-5 rounded-2xl border border-slate-200 space-y-4';
+
+                div.innerHTML = `
+                    <div class="flex items-center justify-between">
+                        <p class="text-xs font-black text-blue-700 uppercase">
+                            EXPERIENCE #${count} <span class="text-red-600">*</span>
+                        </p>
+                        <button type="button" class="remove-experience-btn text-red-600 text-xs font-bold hover:underline">
+                            ✕ Remove
+                        </button>
                     </div>
 
-                    <div>
-                        <label class="block font-bold text-slate-700 mb-1">VESSEL NAME *</label>
-                        <input type="text" name="vessel_name[]" required placeholder="e.g. M/V Star" class="w-full p-2.5 rounded-xl border border-slate-300">
+                    <div class="grid grid-cols-1 sm:grid-cols-4 gap-4 text-xs">
+
+                        <div>
+                            <label class="block font-bold text-slate-700 mb-1">PRINCIPAL NAME</label>
+                            <input type="text" name="principal_name[]" placeholder="e.g. Evergreen" class="w-full p-2.5 rounded-xl border border-slate-300">
+                        </div>
+
+                        <div>
+                            <label class="block font-bold text-slate-700 mb-1">VESSEL NAME *</label>
+                            <input type="text" name="vessel_name[]" required placeholder="e.g. M/V Star" class="w-full p-2.5 rounded-xl border border-slate-300">
+                        </div>
+
+                        <div>
+                            <label class="block font-bold text-slate-700 mb-1">FLAG</label>
+                            <input type="text" name="vessel_flag[]" placeholder="e.g. Panama" class="w-full p-2.5 rounded-xl border border-slate-300">
+                        </div>
+
+                        <div>
+                            <label class="block font-bold text-slate-700 mb-1">NATIONALITY</label>
+                            <input type="text" name="vessel_nat[]" placeholder="e.g. Japanese" class="w-full p-2.5 rounded-xl border border-slate-300">
+                        </div>
+
+                        <div>
+                            <label class="block font-bold text-slate-700 mb-1">MANNING AGENCY</label>
+                            <input type="text" name="manning_agency[]" placeholder="Agency" class="w-full p-2.5 rounded-xl border border-slate-300">
+                        </div>
+
+                        <div>
+                            <label class="block font-bold text-slate-700 mb-1">RANK</label>
+                            <input type="text" name="exp_rank[]" placeholder="Rank" class="w-full p-2.5 rounded-xl border border-slate-300">
+                        </div>
+
+                        <div>
+                            <label class="block font-bold text-slate-700 mb-1">VESSEL TYPE</label>
+                            <input type="text" name="vessel_type[]" placeholder="Vessel Type" class="w-full p-2.5 rounded-xl border border-slate-300">
+                        </div>
+
+                        <div>
+                            <label class="block font-bold text-slate-700 mb-1">GRT</label>
+                            <input type="text" name="vessel_grt[]" placeholder="GRT" class="w-full p-2.5 rounded-xl border border-slate-300">
+                        </div>
+
+                        <div>
+                            <label class="block font-bold text-slate-700 mb-1">KW/BHP</label>
+                            <input type="text" name="engine_power[]" placeholder="KW/BHP" class="w-full p-2.5 rounded-xl border border-slate-300">
+                        </div>
+
+                        <div>
+                            <label class="block font-bold text-slate-700 mb-1">SALARY (USD)</label>
+                            <input type="text" name="salary[]" placeholder="Salary" class="w-full p-2.5 rounded-xl border border-slate-300">
+                        </div>
+
+                        <div>
+                            <label class="block font-bold text-slate-700 mb-1">DATE FROM</label>
+                            <input type="date" name="date_from[]" class="w-full p-2.5 rounded-xl border border-slate-300">
+                        </div>
+
+                        <div>
+                            <label class="block font-bold text-slate-700 mb-1">DATE TO</label>
+                            <input type="date" name="date_to[]" class="w-full p-2.5 rounded-xl border border-slate-300">
+                        </div>
+
                     </div>
+                        `;
 
-                    <div>
-                        <label class="block font-bold text-slate-700 mb-1">FLAG</label>
-                        <input type="text" name="vessel_flag[]" placeholder="e.g. Panama" class="w-full p-2.5 rounded-xl border border-slate-300">
-                    </div>
+                        const removeBtn = div.querySelector('.remove-experience-btn');
+                        removeBtn.addEventListener('click', function() {
+                            if (confirm('Are you sure you want to remove this experience?')) {
+                                div.remove();
+                                renumberExperiences();
+                            }
+                        });
 
-                    <div>
-                        <label class="block font-bold text-slate-700 mb-1">NATIONALITY</label>
-                        <input type="text" name="vessel_nat[]" placeholder="e.g. Japanese" class="w-full p-2.5 rounded-xl border border-slate-300">
-                    </div>
+                        container.appendChild(div);
+                    }
 
-                    <div>
-                        <label class="block font-bold text-slate-700 mb-1">MANNING AGENCY</label>
-                        <input type="text" name="manning_agency[]" placeholder="Agency" class="w-full p-2.5 rounded-xl border border-slate-300">
-                    </div>
-
-                    <div>
-                        <label class="block font-bold text-slate-700 mb-1">RANK</label>
-                        <input type="text" name="exp_rank[]" placeholder="Rank" class="w-full p-2.5 rounded-xl border border-slate-300">
-                    </div>
-
-                    <div>
-                        <label class="block font-bold text-slate-700 mb-1">VESSEL TYPE</label>
-                        <input type="text" name="vessel_type[]" placeholder="Vessel Type" class="w-full p-2.5 rounded-xl border border-slate-300">
-                    </div>
-
-                    <div>
-                        <label class="block font-bold text-slate-700 mb-1">GRT</label>
-                        <input type="text" name="vessel_grt[]" placeholder="GRT" class="w-full p-2.5 rounded-xl border border-slate-300">
-                    </div>
-
-                    <div>
-                        <label class="block font-bold text-slate-700 mb-1">KW/BHP</label>
-                        <input type="text" name="engine_power[]" placeholder="KW/BHP" class="w-full p-2.5 rounded-xl border border-slate-300">
-                    </div>
-
-                    <div>
-                        <label class="block font-bold text-slate-700 mb-1">SALARY (USD)</label>
-                        <input type="text" name="salary[]" placeholder="Salary" class="w-full p-2.5 rounded-xl border border-slate-300">
-                    </div>
-
-                    <div>
-                        <label class="block font-bold text-slate-700 mb-1">DATE FROM</label>
-                        <input type="date" name="date_from[]" class="w-full p-2.5 rounded-xl border border-slate-300">
-                    </div>
-
-                    <div>
-                        <label class="block font-bold text-slate-700 mb-1">DATE TO</label>
-                        <input type="date" name="date_to[]" class="w-full p-2.5 rounded-xl border border-slate-300">
-                    </div>
-
-                </div>
-            `;
-
-            container.appendChild(div);
-        }
+                    function renumberExperiences() {
+                        const container = document.getElementById('experienceContainer');
+                        const cards = container.children;
+                        for (let i = 0; i < cards.length; i++) {
+                            const numberLabel = cards[i].querySelector('p');
+                            if (numberLabel && numberLabel.textContent.includes('EXPERIENCE #')) {
+                                numberLabel.innerHTML = `EXPERIENCE #${i + 1} <span class="text-red-600">*</span>`;
+                            }
+                        }
+                    }
 
         // ============ REVIEW TABS ============
 
