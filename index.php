@@ -439,29 +439,12 @@ $todayDate = date('Y-m-d'); // used to cap date pickers so tomorrow/future dates
                             </div>
                             <div>
                                 <label class="block text-xs font-bold text-slate-700 uppercase mb-1">CONTACT NUMBER <span class="text-red-600">*</span></label>
-                                <input type="tel" name="phone" id="phoneInput" required placeholder="e.g. 09171234567"
-                                    inputmode="numeric"
-                                    pattern="[0-9]{11}"
-                                    maxlength="11"
-                                    aria-describedby="phone_error"
-                                    oninput="this.value = this.value.replace(/[^0-9]/g, '').slice(0, 11); validatePhone(this);"
-                                    onblur="validatePhone(this)"
+                                <input type="tel" name="phone" id="phoneInput" required placeholder="e.g. +1 202 555 0123"
+                                    inputmode="tel"
+                                    autocomplete="tel"
                                     class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-xs font-semibold focus:ring-2 focus:ring-blue-500 outline-none">
-                                <p id="phone_error" class="text-red-600 text-xs font-semibold mt-1 hidden">⚠ Contact number must be exactly 11 digits.</p>
+                                <p class="text-[10px] text-slate-500 mt-1">Enter a complete contact number, including the country code when applicable.</p>
                             </div>
-
-                            <script>
-                            function validatePhone(input) {
-                                const errorMsg = document.getElementById('phone_error');
-                                if (input.value.length > 0 && input.value.length !== 11) {
-                                    errorMsg.classList.remove('hidden');
-                                    input.setCustomValidity('Contact number must be exactly 11 digits.');
-                                } else {
-                                    errorMsg.classList.add('hidden');
-                                    input.setCustomValidity('');
-                                }
-                            }
-                            </script>
                             <div>
                                 <label class="block text-xs font-bold text-slate-700 uppercase mb-1">CIVIL STATUS <span class="text-red-600">*</span></label>
                                 <select name="civil_status" required class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-xs font-semibold focus:ring-2 focus:ring-blue-500 outline-none">
