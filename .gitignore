@@ -7,3 +7,4 @@ coverage/
 .env*
 !.env.example
 src/assets/images/cargo_ship.jpg
+index.backup.php

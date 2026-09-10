@@ -5,10 +5,12 @@
  * Designed for XAMPP, WAMP, or `php -S localhost:8000`
  */
 
-session_start();
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 
 // Handle Form Submission POST with Strict Sanitization
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'submit_application') {
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['action']) && $_POST['action'] === 'submit_application') {
     $clean = [];
 
     // Sanitize Single-Value Fields
@@ -167,6 +169,15 @@ $todayDate = date('Y-m-d');
             <input type="hidden" name="is_cadet" id="isCadetInput" value="0">
             <!-- ================= STEP 0: TERMS & CONDITIONS ================= -->
             <div id="step-terms" class="step-page space-y-6 <?php echo $step !== 'terms' && $step !== '' ? 'hidden' : ''; ?>">
+                <?php if (isset($_GET['error']) && $_GET['error'] === 'underage'): ?>
+                <div class="bg-red-600/95 backdrop-blur-md border-2 border-red-300 text-white p-4 rounded-2xl shadow-2xl flex items-center gap-3">
+                    <span class="text-2xl">&#9888;</span>
+                    <div>
+                        <p class="font-black text-sm uppercase tracking-wide">Application Rejected (Underage)</p>
+                        <p class="text-xs text-white/90">You must be at least 18 years of age to apply in compliance with Maritime Labour Convention (MLC 2006) standards.</p>
+                    </div>
+                </div>
+                <?php endif; ?>
                 <div class="text-center space-y-1">
                     <p class="text-white/90 text-xs sm:text-sm font-bold tracking-wider uppercase drop-shadow-sm">
                         CRYSTAL SHIPPING INC - IEAC APPLICATION
@@ -679,6 +690,7 @@ $todayDate = date('Y-m-d');
                                 </tbody>
                             </table>
                         </div>
+                    </div>
 
                     <!-- COC / License -->
                     <div class="space-y-4">
@@ -1068,6 +1080,9 @@ $todayDate = date('Y-m-d');
                 var newUrl = window.location.pathname + '?step=' + stepId;
                 window.history.pushState({ step: stepId }, '', newUrl);
             }
+            if (typeof saveFormDraft === 'function') {
+                saveFormDraft();
+            }
         }
 
         window.addEventListener('popstate', function(e) {
@@ -1079,6 +1094,196 @@ $todayDate = date('Y-m-d');
                 goToStep(step, false);
             }
         });
+
+        // ==================== AUTO-SAVE & DRAFT RESTORATION ====================
+        var DRAFT_KEY = 'crystal_portal_draft';
+
+        function saveFormDraft() {
+            try {
+                var form = document.getElementById('seafarerForm');
+                if (!form) return;
+
+                var currentStepEl = document.querySelector('.step-page:not(.hidden)');
+                var currentStepId = currentStepEl ? currentStepEl.id.replace('step-', '') : 'terms';
+
+                var draft = {
+                    currentStep: currentStepId,
+                    termsChecked: document.getElementById('termsCheck') ? document.getElementById('termsCheck').checked : false,
+                    certifyChecked: document.getElementById('certifyCheck') ? document.getElementById('certifyCheck').checked : false,
+                    cadetToggle: document.getElementById('cadetToggle') ? document.getElementById('cadetToggle').checked : false,
+                    isCadet: document.getElementById('isCadetInput') ? document.getElementById('isCadetInput').value : '0',
+                    photoBase64: document.getElementById('photoBase64') ? document.getElementById('photoBase64').value : '',
+                    fields: {},
+                    trainingRows: [],
+                    experienceCards: []
+                };
+
+                // Scalar inputs
+                var inputs = form.querySelectorAll('input:not([name$="[]"]):not([type="checkbox"]):not([type="file"]), select:not([name$="[]"]), textarea:not([name$="[]"])');
+                inputs.forEach(function(inp) {
+                    if (inp.name) {
+                        draft.fields[inp.name] = inp.value;
+                    }
+                });
+
+                // Training rows
+                var tNames = form.querySelectorAll('input[name="training_name[]"]');
+                var tNos = form.querySelectorAll('input[name="training_no[]"]');
+                var tIssues = form.querySelectorAll('input[name="training_issue[]"]');
+                var tExpiries = form.querySelectorAll('input[name="training_expiry[]"]');
+                for (var i = 0; i < tNames.length; i++) {
+                    draft.trainingRows.push({
+                        name: tNames[i] ? tNames[i].value : '',
+                        no: tNos[i] ? tNos[i].value : '',
+                        issue: tIssues[i] ? tIssues[i].value : '',
+                        expiry: tExpiries[i] ? tExpiries[i].value : ''
+                    });
+                }
+
+                // Experience cards
+                var expCards = document.querySelectorAll('#experienceContainer > .experience-card');
+                expCards.forEach(function(card) {
+                    var expData = {};
+                    var cardInputs = card.querySelectorAll('input');
+                    cardInputs.forEach(function(inp) {
+                        var cleanName = inp.name.replace('[]', '');
+                        expData[cleanName] = inp.value;
+                    });
+                    draft.experienceCards.push(expData);
+                });
+
+                sessionStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+            } catch (e) {
+                console.warn('Draft save error:', e);
+            }
+        }
+
+        function restoreFormDraft() {
+            try {
+                var raw = sessionStorage.getItem(DRAFT_KEY);
+                if (!raw) return;
+                var draft = JSON.parse(raw);
+                if (!draft) return;
+
+                var form = document.getElementById('seafarerForm');
+                if (!form) return;
+
+                // Restore scalar fields
+                if (draft.fields) {
+                    for (var name in draft.fields) {
+                        var el = form.elements[name];
+                        if (el && el.type !== 'file' && el.type !== 'checkbox') {
+                            el.value = draft.fields[name];
+                        }
+                    }
+                    if (draft.fields['dob'] && typeof calcAge === 'function') {
+                        calcAge();
+                    }
+                }
+
+                if (typeof toggleHowKnownFields === 'function') {
+                    toggleHowKnownFields();
+                }
+
+                if (draft.termsChecked) {
+                    var tc = document.getElementById('termsCheck');
+                    if (tc) {
+                        tc.checked = true;
+                        if (typeof toggleTermsBtn === 'function') toggleTermsBtn();
+                    }
+                }
+
+                if (draft.certifyChecked) {
+                    var cc = document.getElementById('certifyCheck');
+                    if (cc) cc.checked = true;
+                }
+
+                if (draft.photoBase64) {
+                    var pField = document.getElementById('photoBase64');
+                    var preview = document.getElementById('photoPreview');
+                    if (pField && preview) {
+                        pField.value = draft.photoBase64;
+                        preview.innerHTML = '<img src="' + draft.photoBase64 + '" class="w-24 h-24 object-cover rounded-xl shadow-md border-2 border-white mb-1"><span class="text-[10px] text-blue-600 font-bold">Change Photo</span>';
+                    }
+                }
+
+                // Restore Training Rows
+                if (draft.trainingRows && draft.trainingRows.length > 0) {
+                    var tNames = form.querySelectorAll('input[name="training_name[]"]');
+                    var tNos = form.querySelectorAll('input[name="training_no[]"]');
+                    var tIssues = form.querySelectorAll('input[name="training_issue[]"]');
+                    var tExpiries = form.querySelectorAll('input[name="training_expiry[]"]');
+
+                    if (tNames[0]) tNames[0].value = draft.trainingRows[0].name || '';
+                    if (tNos[0]) tNos[0].value = draft.trainingRows[0].no || '';
+                    if (tIssues[0]) tIssues[0].value = draft.trainingRows[0].issue || '';
+                    if (tExpiries[0]) tExpiries[0].value = draft.trainingRows[0].expiry || '';
+
+                    for (var t = 1; t < draft.trainingRows.length; t++) {
+                        if (typeof addTrainingRow === 'function') {
+                            addTrainingRow();
+                            var uNames = form.querySelectorAll('input[name="training_name[]"]');
+                            var uNos = form.querySelectorAll('input[name="training_no[]"]');
+                            var uIssues = form.querySelectorAll('input[name="training_issue[]"]');
+                            var uExpiries = form.querySelectorAll('input[name="training_expiry[]"]');
+                            if (uNames[t]) uNames[t].value = draft.trainingRows[t].name || '';
+                            if (uNos[t]) uNos[t].value = draft.trainingRows[t].no || '';
+                            if (uIssues[t]) uIssues[t].value = draft.trainingRows[t].issue || '';
+                            if (uExpiries[t]) uExpiries[t].value = draft.trainingRows[t].expiry || '';
+                        }
+                    }
+                }
+
+                // Restore Cadet Mode
+                if (draft.cadetToggle || draft.isCadet === '1') {
+                    var cadetCheck = document.getElementById('cadetToggle');
+                    if (cadetCheck) {
+                        cadetCheck.checked = true;
+                        if (typeof toggleCadetMode === 'function') toggleCadetMode(true);
+                    }
+                }
+
+                // Restore Experience Cards
+                if (draft.experienceCards && draft.experienceCards.length > 0 && draft.isCadet !== '1') {
+                    var firstCard = document.querySelector('#experienceContainer > .experience-card');
+                    if (firstCard && draft.experienceCards[0]) {
+                        for (var k in draft.experienceCards[0]) {
+                            var inp0 = firstCard.querySelector('input[name="' + k + '[]"]');
+                            if (inp0) inp0.value = draft.experienceCards[0][k];
+                        }
+                    }
+
+                    for (var x = 1; x < draft.experienceCards.length; x++) {
+                        if (typeof addExperienceRow === 'function') {
+                            addExperienceRow();
+                            var allCards = document.querySelectorAll('#experienceContainer > .experience-card');
+                            var targetCard = allCards[x];
+                            if (targetCard && draft.experienceCards[x]) {
+                                for (var k2 in draft.experienceCards[x]) {
+                                    var inpx = targetCard.querySelector('input[name="' + k2 + '[]"]');
+                                    if (inpx) inpx.value = draft.experienceCards[x][k2];
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Restore Step View
+                var urlParams = new URLSearchParams(window.location.search);
+                var activeStep = urlParams.get('step') || draft.currentStep || 'terms';
+                if (activeStep && activeStep !== 'terms' && activeStep !== 'success') {
+                    goToStep(activeStep, false);
+                }
+            } catch (e) {
+                console.warn('Draft restore error:', e);
+            }
+        }
+
+        function clearFormDraft() {
+            try {
+                sessionStorage.removeItem(DRAFT_KEY);
+            } catch (e) {}
+        }
 
         document.addEventListener('DOMContentLoaded', function() {
             var params = new URLSearchParams(window.location.search);
@@ -1101,8 +1306,17 @@ $todayDate = date('Y-m-d');
                             toggleCadetMode(true);
                         }
                     }
+                    if (typeof saveFormDraft === 'function') saveFormDraft();
                 });
             }
+
+            var seafarerForm = document.getElementById('seafarerForm');
+            if (seafarerForm) {
+                seafarerForm.addEventListener('input', saveFormDraft);
+                seafarerForm.addEventListener('change', saveFormDraft);
+            }
+
+            restoreFormDraft();
         });
 
         function toggleCadetMode(isCadet) {
@@ -1307,6 +1521,7 @@ $todayDate = date('Y-m-d');
                     var compressedDataUrl = canvas.toDataURL('image/jpeg', 0.85);
                     document.getElementById('photoBase64').value = compressedDataUrl;
                     document.getElementById('photoPreview').innerHTML = '<img src="' + compressedDataUrl + '" class="w-24 h-24 object-cover rounded-xl shadow-md border-2 border-white mb-1"><span class="text-[10px] text-blue-600 font-bold">Change Photo</span>';
+                    if (typeof saveFormDraft === 'function') saveFormDraft();
                 };
                 img.src = e.target.result;
             };
@@ -1479,6 +1694,9 @@ $todayDate = date('Y-m-d');
                 submitBtn.classList.add('opacity-75', 'cursor-not-allowed');
             }
             isSubmitting = true;
+            if (typeof clearFormDraft === 'function') {
+                clearFormDraft();
+            }
             closeConfirmModal();
             document.getElementById('seafarerForm').requestSubmit();
         }
