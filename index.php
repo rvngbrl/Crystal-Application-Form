@@ -149,8 +149,12 @@ $todayDate = date('Y-m-d');
             </div>
 
             <!-- Quick Step Badge -->
-            <div class="hidden sm:flex items-center gap-2 bg-slate-100 px-3 py-1.5 rounded-full text-xs font-bold text-slate-700">
-
+            <div id="headerStepBadge" class="hidden sm:flex items-center gap-2 bg-slate-100 px-3.5 py-1.5 rounded-full text-xs font-bold text-slate-700 shadow-sm border border-slate-200">
+                <?php if ($step === 'success'): ?>
+                    <span class="w-2 h-2 rounded-full bg-emerald-500"></span><span>Submitted</span>
+                <?php else: ?>
+                    <span class="w-2 h-2 rounded-full bg-slate-400"></span><span>Terms &amp; Conditions</span>
+                <?php endif; ?>
             </div>
         </div>
         <div class="h-1.5 w-full bg-slate-200">
@@ -161,7 +165,6 @@ $todayDate = date('Y-m-d');
     <!-- Main Section -->
     <main class="flex-1 py-8 px-4 sm:px-6 lg:px-8 max-w-6xl mx-auto w-full">
 
-        <!-- Client-Side Form Wizard Handler -->
         <!-- Client-Side Form Wizard Handler -->
         <form id="seafarerForm" action="index.php" method="POST" enctype="multipart/form-data" class="space-y-6">
             <input type="hidden" name="action" value="submit_application">
@@ -197,7 +200,7 @@ $todayDate = date('Y-m-d');
 
                     <p><strong>2. Accuracy and Authenticity Declaration:</strong> By completing this form, the applicant declares under penalty of administrative or legal disqualification that all personal details, sea service records, STCW certificates, medical records, and travel documents submitted are authentic, complete, and accurate.</p>
 
-                    <p><strong>3. Data Privacy Consent:</strong> I hereby certify that all information that I will encode are correct and accurate and that I give my consent to processing of my personal data in accordance with the DATA PRIVACY Act of the Philippines and its Implementing Rules and Regulations (IRR) from September 9, 2016 for employment on vessels of foreign shipowners.</p>
+                    <p><strong>3. Data Privacy Consent:</strong> I hereby certify that all information provided in this application is true, accurate, and complete. In compliance with Republic Act No. 10173 (Data Privacy Act of 2012) and its Implementing Rules and Regulations (IRR), I voluntarily give my free and informed consent to Crystal Shipping Inc. to collect, record, organize, store, update, process, and transfer my personal and sensitive personal information to prospective foreign shipowners, maritime principals, and relevant regulatory authorities solely for the purpose of recruitment, qualification evaluation, and sea deployment.</p>
 
                     <p><strong>4. Zero Placement Fee Policy:</strong> Crystal Shipping Inc. adheres strictly to a <strong>Zero Placement Fee Policy</strong>. No fee, charge, or monetary commission shall be solicited or collected from any seafarer at any stage of recruitment.</p>
                 </div>
@@ -663,19 +666,19 @@ $todayDate = date('Y-m-d');
                                     <!-- Passport -->
                                     <tr>
                                         <td class="p-3 font-bold text-slate-900">PASSPORT</td>
-                                        <td class="p-2"><input type="text" name="passport_no" required placeholder="Passport No." class="w-full p-2 border border-slate-300 rounded-lg"></td>
-                                        <td class="p-2"><input type="date" name="passport_issue" id="passportIssue" required max="<?php echo $todayDate; ?>" class="w-full p-2 border border-slate-300 rounded-lg" onchange="validateDatePair(this, document.getElementById('passportExpiry'), 'Passport', document.getElementById('passportDateError'))"></td>
-                                        <td class="p-2"><input type="date" name="passport_expiry" id="passportExpiry" required class="w-full p-2 border border-slate-300 rounded-lg" onchange="validateDatePair(document.getElementById('passportIssue'), this, 'Passport', document.getElementById('passportDateError'))"></td>
-                                        <td class="p-2"><input type="text" name="passport_place" required placeholder="Place Issued" class="w-full p-2 border border-slate-300 rounded-lg"></td>
+                                        <td class="p-2"><input type="text" name="passport_no" required placeholder="Passport No." class="w-full p-2 border border-slate-300 rounded-lg" oninput="checkPassportCompleteness()" onchange="checkPassportCompleteness()"></td>
+                                        <td class="p-2"><input type="date" name="passport_issue" id="passportIssue" required max="<?php echo $todayDate; ?>" class="w-full p-2 border border-slate-300 rounded-lg" oninput="checkPassportCompleteness()" onchange="checkPassportCompleteness()"></td>
+                                        <td class="p-2"><input type="date" name="passport_expiry" id="passportExpiry" required class="w-full p-2 border border-slate-300 rounded-lg" oninput="checkPassportCompleteness()" onchange="checkPassportCompleteness()"></td>
+                                        <td class="p-2"><input type="text" name="passport_place" required placeholder="Place Issued" class="w-full p-2 border border-slate-300 rounded-lg" oninput="checkPassportCompleteness()" onchange="checkPassportCompleteness()"></td>
                                     </tr>
                                     <tr><td colspan="5" class="px-3 py-0"><p id="passportDateError" class="text-red-600 text-xs font-semibold hidden"></p></td></tr>
                                     <!-- Seaman's Book -->
                                     <tr>
                                         <td class="p-3 font-bold text-slate-900">SEAMAN'S BOOK</td>
-                                        <td class="p-2"><input type="text" name="sirb_no" required placeholder="SIRB / SID No." class="w-full p-2 border border-slate-300 rounded-lg"></td>
-                                        <td class="p-2"><input type="date" name="sirb_issue" id="sirbIssue" required max="<?php echo $todayDate; ?>" class="w-full p-2 border border-slate-300 rounded-lg" onchange="validateDatePair(this, document.getElementById('sirbExpiry'), 'Seaman\'s Book', document.getElementById('sirbDateError'))"></td>
-                                        <td class="p-2"><input type="date" name="sirb_expiry" id="sirbExpiry" required class="w-full p-2 border border-slate-300 rounded-lg" onchange="validateDatePair(document.getElementById('sirbIssue'), this, 'Seaman\'s Book', document.getElementById('sirbDateError'))"></td>
-                                        <td class="p-2"><input type="text" name="sirb_place" required placeholder="Place Issued" class="w-full p-2 border border-slate-300 rounded-lg"></td>
+                                        <td class="p-2"><input type="text" name="sirb_no" required placeholder="SIRB / SID No." class="w-full p-2 border border-slate-300 rounded-lg" oninput="checkSirbCompleteness()" onchange="checkSirbCompleteness()"></td>
+                                        <td class="p-2"><input type="date" name="sirb_issue" id="sirbIssue" required max="<?php echo $todayDate; ?>" class="w-full p-2 border border-slate-300 rounded-lg" oninput="checkSirbCompleteness()" onchange="checkSirbCompleteness()"></td>
+                                        <td class="p-2"><input type="date" name="sirb_expiry" id="sirbExpiry" required class="w-full p-2 border border-slate-300 rounded-lg" oninput="checkSirbCompleteness()" onchange="checkSirbCompleteness()"></td>
+                                        <td class="p-2"><input type="text" name="sirb_place" required placeholder="Place Issued" class="w-full p-2 border border-slate-300 rounded-lg" oninput="checkSirbCompleteness()" onchange="checkSirbCompleteness()"></td>
                                     </tr>
                                     <tr><td colspan="5" class="px-3 py-0"><p id="sirbDateError" class="text-red-600 text-xs font-semibold hidden"></p></td></tr>
                                     <!-- GOC License -->
@@ -1057,8 +1060,25 @@ $todayDate = date('Y-m-d');
 
         function updateHeaderProgress(stepId) {
             const bar = document.getElementById('headerProgressBar');
+            const badge = document.getElementById('headerStepBadge');
+
+            const badgeMap = {
+                'terms': '<span class="w-2 h-2 rounded-full bg-slate-400"></span><span>Terms & Conditions</span>',
+                'guide': '<span class="w-2 h-2 rounded-full bg-blue-500"></span><span>Application Guide</span>',
+                'personal': '<span class="w-2 h-2 rounded-full bg-blue-600 animate-pulse"></span><span>Step 1 of 3: Personal Info</span>',
+                'documents': '<span class="w-2 h-2 rounded-full bg-blue-600 animate-pulse"></span><span>Step 2 of 3: Documents</span>',
+                'shipboard': '<span class="w-2 h-2 rounded-full bg-blue-600 animate-pulse"></span><span>Step 3 of 3: Shipboard</span>',
+                'review': '<span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span><span>Review & Confirm</span>',
+                'success': '<span class="w-2 h-2 rounded-full bg-emerald-500"></span><span>Submitted</span>'
+            };
+
+            if (badge && badgeMap[stepId]) {
+                badge.innerHTML = badgeMap[stepId];
+            }
+
             if (!bar) return;
             if (stepId === 'terms') { bar.style.width = '0%'; return; }
+            if (stepId === 'success') { bar.style.width = '100%'; return; }
             const wizardSteps = ['guide', 'personal', 'documents', 'shipboard', 'review'];
             const idx = wizardSteps.indexOf(stepId);
             if (idx === -1) { bar.style.width = '100%'; return; }
@@ -1273,6 +1293,12 @@ $todayDate = date('Y-m-d');
                 if (activeStep && activeStep !== 'terms' && activeStep !== 'success') {
                     goToStep(activeStep, false);
                 }
+
+                // Run completeness checks on restored document fields
+                if (typeof checkPassportCompleteness === 'function') checkPassportCompleteness();
+                if (typeof checkSirbCompleteness === 'function') checkSirbCompleteness();
+                if (typeof checkGocCompleteness === 'function') checkGocCompleteness();
+                if (typeof checkCocCompleteness === 'function') checkCocCompleteness();
             } catch (e) {
                 console.warn('Draft restore error:', e);
             }
@@ -1287,7 +1313,10 @@ $todayDate = date('Y-m-d');
         document.addEventListener('DOMContentLoaded', function() {
             var params = new URLSearchParams(window.location.search);
             var initialStep = params.get('step') || 'terms';
-            if (initialStep === 'success') return;
+            if (initialStep === 'success') {
+                updateHeaderProgress('success');
+                return;
+            }
             if (!document.getElementById('step-' + initialStep)) { initialStep = 'terms'; }
             document.querySelectorAll('.step-page').forEach(function(el) { el.classList.add('hidden'); });
             var startElement = document.getElementById('step-' + initialStep);
@@ -1372,6 +1401,102 @@ $todayDate = date('Y-m-d');
                 if (expiryDateW < today && expiryInput) { expiryInput.classList.add('border-amber-500'); }
             }
             return true;
+        }
+
+        function checkPassportCompleteness(forceCheck) {
+            var pNo = document.querySelector('input[name="passport_no"]');
+            var pIssue = document.getElementById('passportIssue');
+            var pExpiry = document.getElementById('passportExpiry');
+            var pPlace = document.querySelector('input[name="passport_place"]');
+            var pErr = document.getElementById('passportDateError');
+            if (!pNo || !pIssue || !pExpiry || !pPlace) return true;
+
+            var noVal = pNo.value.trim();
+            var issueVal = pIssue.value;
+            var expiryVal = pExpiry.value;
+            var placeVal = pPlace.value.trim();
+
+            var hasAny = (noVal !== '' || issueVal !== '' || expiryVal !== '' || placeVal !== '');
+
+            if (hasAny || forceCheck) {
+                var missing = [];
+                if (!noVal) { missing.push('Document No.'); pNo.classList.add('border-red-500', 'bg-red-50'); }
+                else { pNo.classList.remove('border-red-500', 'bg-red-50'); }
+
+                if (!issueVal) { missing.push('Issue Date'); pIssue.classList.add('border-red-500', 'bg-red-50'); }
+                else { pIssue.classList.remove('border-red-500', 'bg-red-50'); }
+
+                if (!expiryVal) { missing.push('Expiry Date'); pExpiry.classList.add('border-red-500', 'bg-red-50'); }
+                else { pExpiry.classList.remove('border-red-500', 'bg-red-50'); }
+
+                if (!placeVal) { missing.push('Place Issued'); pPlace.classList.add('border-red-500', 'bg-red-50'); }
+                else { pPlace.classList.remove('border-red-500', 'bg-red-50'); }
+
+                if (missing.length > 0) {
+                    if (pErr) {
+                        pErr.textContent = '\u26A0 Passport: Please complete all fields (' + missing.join(', ') + ').';
+                        pErr.classList.remove('hidden');
+                    }
+                    return false;
+                } else {
+                    return validateDatePair(pIssue, pExpiry, 'Passport', pErr);
+                }
+            } else {
+                if (pErr) { pErr.classList.add('hidden'); pErr.textContent = ''; }
+                [pNo, pIssue, pExpiry, pPlace].forEach(function(el) {
+                    el.classList.remove('border-red-500', 'bg-red-50');
+                    el.setCustomValidity('');
+                });
+                return true;
+            }
+        }
+
+        function checkSirbCompleteness(forceCheck) {
+            var sNo = document.querySelector('input[name="sirb_no"]');
+            var sIssue = document.getElementById('sirbIssue');
+            var sExpiry = document.getElementById('sirbExpiry');
+            var sPlace = document.querySelector('input[name="sirb_place"]');
+            var sErr = document.getElementById('sirbDateError');
+            if (!sNo || !sIssue || !sExpiry || !sPlace) return true;
+
+            var noVal = sNo.value.trim();
+            var issueVal = sIssue.value;
+            var expiryVal = sExpiry.value;
+            var placeVal = sPlace.value.trim();
+
+            var hasAny = (noVal !== '' || issueVal !== '' || expiryVal !== '' || placeVal !== '');
+
+            if (hasAny || forceCheck) {
+                var missing = [];
+                if (!noVal) { missing.push('Document No.'); sNo.classList.add('border-red-500', 'bg-red-50'); }
+                else { sNo.classList.remove('border-red-500', 'bg-red-50'); }
+
+                if (!issueVal) { missing.push('Issue Date'); sIssue.classList.add('border-red-500', 'bg-red-50'); }
+                else { sIssue.classList.remove('border-red-500', 'bg-red-50'); }
+
+                if (!expiryVal) { missing.push('Expiry Date'); sExpiry.classList.add('border-red-500', 'bg-red-50'); }
+                else { sExpiry.classList.remove('border-red-500', 'bg-red-50'); }
+
+                if (!placeVal) { missing.push('Place Issued'); sPlace.classList.add('border-red-500', 'bg-red-50'); }
+                else { sPlace.classList.remove('border-red-500', 'bg-red-50'); }
+
+                if (missing.length > 0) {
+                    if (sErr) {
+                        sErr.textContent = '\u26A0 Seaman\'s Book: Please complete all fields (' + missing.join(', ') + ').';
+                        sErr.classList.remove('hidden');
+                    }
+                    return false;
+                } else {
+                    return validateDatePair(sIssue, sExpiry, 'Seaman\'s Book', sErr);
+                }
+            } else {
+                if (sErr) { sErr.classList.add('hidden'); sErr.textContent = ''; }
+                [sNo, sIssue, sExpiry, sPlace].forEach(function(el) {
+                    el.classList.remove('border-red-500', 'bg-red-50');
+                    el.setCustomValidity('');
+                });
+                return true;
+            }
         }
 
         function checkGocCompleteness() {
@@ -1528,43 +1653,21 @@ $todayDate = date('Y-m-d');
             var allValid = true;
 
             // 1. Mandatory Passport
-            var pIssue = document.getElementById('passportIssue');
-            var pExpiry = document.getElementById('passportExpiry');
-            var pErr = document.getElementById('passportDateError');
-            if (!pIssue || !pIssue.value || !pExpiry || !pExpiry.value) {
-                if (pErr) {
-                    pErr.textContent = '\u26A0 Passport: Both Issue Date and Expiry Date are required.';
-                    pErr.classList.remove('hidden');
+            if (!checkPassportCompleteness(true)) {
+                if (allValid) {
+                    var pEl = document.getElementById('passportIssue') || document.querySelector('input[name="passport_no"]');
+                    if (pEl) pEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 }
-                if (pIssue && !pIssue.value) pIssue.classList.add('border-red-500', 'bg-red-50');
-                if (pExpiry && !pExpiry.value) pExpiry.classList.add('border-red-500', 'bg-red-50');
-                if (allValid) { (pIssue || pExpiry).scrollIntoView({ behavior: 'smooth', block: 'center' }); }
                 allValid = false;
-            } else {
-                if (!validateDatePair(pIssue, pExpiry, 'Passport', pErr)) {
-                    if (allValid) { (pIssue || pExpiry).scrollIntoView({ behavior: 'smooth', block: 'center' }); }
-                    allValid = false;
-                }
             }
 
             // 2. Mandatory Seaman's Book
-            var sIssue = document.getElementById('sirbIssue');
-            var sExpiry = document.getElementById('sirbExpiry');
-            var sErr = document.getElementById('sirbDateError');
-            if (!sIssue || !sIssue.value || !sExpiry || !sExpiry.value) {
-                if (sErr) {
-                    sErr.textContent = '\u26A0 Seaman\'s Book: Both Issue Date and Expiry Date are required.';
-                    sErr.classList.remove('hidden');
+            if (!checkSirbCompleteness(true)) {
+                if (allValid) {
+                    var sEl = document.getElementById('sirbIssue') || document.querySelector('input[name="sirb_no"]');
+                    if (sEl) sEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 }
-                if (sIssue && !sIssue.value) sIssue.classList.add('border-red-500', 'bg-red-50');
-                if (sExpiry && !sExpiry.value) sExpiry.classList.add('border-red-500', 'bg-red-50');
-                if (allValid) { (sIssue || sExpiry).scrollIntoView({ behavior: 'smooth', block: 'center' }); }
                 allValid = false;
-            } else {
-                if (!validateDatePair(sIssue, sExpiry, 'Seaman\'s Book', sErr)) {
-                    if (allValid) { (sIssue || sExpiry).scrollIntoView({ behavior: 'smooth', block: 'center' }); }
-                    allValid = false;
-                }
             }
 
             // 3. Conditionally Mandatory GOC License
@@ -1638,15 +1741,17 @@ $todayDate = date('Y-m-d');
         function goToNextStep(nextStepId) {
             var currentStep = document.querySelector('.step-page:not(.hidden)');
             if (!currentStep) { goToStep(nextStepId); return; }
+
+            if (currentStep.id === 'step-documents') {
+                if (!validateAllDocumentDates()) return;
+            }
+
             var fields = currentStep.querySelectorAll('input:not([type="hidden"]):not([type="checkbox"]), select, textarea');
             for (var i = 0; i < fields.length; i++) {
                 if (fields[i].offsetParent !== null && !fields[i].checkValidity()) {
                     fields[i].reportValidity();
                     return;
                 }
-            }
-            if (currentStep.id === 'step-documents') {
-                if (!validateAllDocumentDates()) return;
             }
             if (currentStep.id === 'step-shipboard') {
                 if (!validateExperiences()) return;
