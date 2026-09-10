@@ -148,13 +148,21 @@ $todayDate = date('Y-m-d');
                 </div>
             </div>
 
-            <!-- Quick Step Badge -->
-            <div id="headerStepBadge" class="hidden sm:flex items-center gap-2 bg-slate-100 px-3.5 py-1.5 rounded-full text-xs font-bold text-slate-700 shadow-sm border border-slate-200">
-                <?php if ($step === 'success'): ?>
-                    <span class="w-2 h-2 rounded-full bg-emerald-500"></span><span>Submitted</span>
-                <?php else: ?>
-                    <span class="w-2 h-2 rounded-full bg-slate-400"></span><span>Terms &amp; Conditions</span>
-                <?php endif; ?>
+            <div class="flex items-center gap-3">
+                <!-- Quick Step Badge -->
+                <div id="headerStepBadge" class="hidden sm:flex items-center gap-2 bg-slate-100 px-3.5 py-1.5 rounded-full text-xs font-bold text-slate-700 shadow-sm border border-slate-200">
+                    <?php if ($step === 'success'): ?>
+                        <span class="w-2 h-2 rounded-full bg-emerald-500"></span><span>Submitted</span>
+                    <?php else: ?>
+                        <span class="w-2 h-2 rounded-full bg-slate-400"></span><span>Terms &amp; Conditions</span>
+                    <?php endif; ?>
+                </div>
+
+                <!-- Explicit "New Applicant" Kiosk Reset Button -->
+                <button type="button" onclick="startNewApplicant()" title="Reset form and start fresh for a new applicant" class="px-3.5 py-1.5 rounded-full text-xs font-black tracking-wide uppercase transition-all duration-200 border border-slate-300 bg-white text-slate-700 hover:bg-red-50 hover:text-red-700 hover:border-red-300 shadow-sm flex items-center gap-1.5 shrink-0 cursor-pointer">
+                    <span class="text-sm">🔄</span>
+                    <span>New Applicant</span>
+                </button>
             </div>
         </div>
         <div class="h-1.5 w-full bg-slate-200">
@@ -1131,16 +1139,16 @@ $todayDate = date('Y-m-d');
                     certifyChecked: document.getElementById('certifyCheck') ? document.getElementById('certifyCheck').checked : false,
                     cadetToggle: document.getElementById('cadetToggle') ? document.getElementById('cadetToggle').checked : false,
                     isCadet: document.getElementById('isCadetInput') ? document.getElementById('isCadetInput').value : '0',
-                    photoBase64: document.getElementById('photoBase64') ? document.getElementById('photoBase64').value : '',
                     fields: {},
                     trainingRows: [],
                     experienceCards: []
                 };
 
-                // Scalar inputs
+                // Scalar inputs - EXCLUDE sensitive fields entirely (never written to sessionStorage)
+                var sensitiveFields = ['photo_base64', 'pagibig_no', 'sss_no', 'philhealth_no'];
                 var inputs = form.querySelectorAll('input:not([name$="[]"]):not([type="checkbox"]):not([type="file"]), select:not([name$="[]"]), textarea:not([name$="[]"])');
                 inputs.forEach(function(inp) {
-                    if (inp.name) {
+                    if (inp.name && sensitiveFields.indexOf(inp.name) === -1) {
                         draft.fields[inp.name] = inp.value;
                     }
                 });
@@ -1215,15 +1223,6 @@ $todayDate = date('Y-m-d');
                 if (draft.certifyChecked) {
                     var cc = document.getElementById('certifyCheck');
                     if (cc) cc.checked = true;
-                }
-
-                if (draft.photoBase64) {
-                    var pField = document.getElementById('photoBase64');
-                    var preview = document.getElementById('photoPreview');
-                    if (pField && preview) {
-                        pField.value = draft.photoBase64;
-                        preview.innerHTML = '<img src="' + draft.photoBase64 + '" class="w-24 h-24 object-cover rounded-xl shadow-md border-2 border-white mb-1"><span class="text-[10px] text-blue-600 font-bold">Change Photo</span>';
-                    }
                 }
 
                 // Restore Training Rows
@@ -1309,6 +1308,29 @@ $todayDate = date('Y-m-d');
                 sessionStorage.removeItem(DRAFT_KEY);
             } catch (e) {}
         }
+
+        function startNewApplicant() {
+            if (confirm('Start fresh for a new applicant? This will clear all entered data and return to Step 1.')) {
+                clearFormDraft();
+                var form = document.getElementById('seafarerForm');
+                if (form) form.reset();
+                window.location.href = 'index.php?step=terms';
+            }
+        }
+
+        var isReloading = false;
+        window.addEventListener('keydown', function(e) {
+            if (e.key === 'F5' || ((e.ctrlKey || e.metaKey) && (e.key === 'r' || e.key === 'R'))) {
+                isReloading = true;
+            }
+        });
+
+        // Defense-in-depth: clear draft when tab/window is closed or navigated away
+        window.addEventListener('beforeunload', function() {
+            if (!isReloading) {
+                clearFormDraft();
+            }
+        });
 
         document.addEventListener('DOMContentLoaded', function() {
             var params = new URLSearchParams(window.location.search);
