@@ -1318,20 +1318,6 @@ $todayDate = date('Y-m-d');
             }
         }
 
-        var isReloading = false;
-        window.addEventListener('keydown', function(e) {
-            if (e.key === 'F5' || ((e.ctrlKey || e.metaKey) && (e.key === 'r' || e.key === 'R'))) {
-                isReloading = true;
-            }
-        });
-
-        // Defense-in-depth: clear draft when tab/window is closed or navigated away
-        window.addEventListener('beforeunload', function() {
-            if (!isReloading) {
-                clearFormDraft();
-            }
-        });
-
         document.addEventListener('DOMContentLoaded', function() {
             var params = new URLSearchParams(window.location.search);
             var initialStep = params.get('step') || 'terms';
