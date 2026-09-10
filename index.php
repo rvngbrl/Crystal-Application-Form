@@ -425,12 +425,12 @@ $todayDate = date('Y-m-d');
 
                                 <div id="referralNameField" class="sm:col-span-2 hidden">
                                     <label class="block text-xs font-bold text-slate-700 uppercase mb-1">NAME WHO REFERRED YOU</label>
-                                    <input type="text" name="referral_name" placeholder="Enter Referrer's Name" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-xs font-semibold focus:ring-2 focus:ring-blue-500 outline-none">
+                                    <input type="text" name="referral_name" id="referralNameInput" placeholder="Enter Referrer's Name" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-xs font-semibold focus:ring-2 focus:ring-blue-500 outline-none">
                                 </div>
 
                                 <div id="othersHowKnownField" class="sm:col-span-2 hidden">
                                     <label class="block text-xs font-bold text-slate-700 uppercase mb-1">WHERE DID YOU SEE CRYSTAL?</label>
-                                    <input type="text" name="others_how_known" placeholder="Please specify" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-xs font-semibold focus:ring-2 focus:ring-blue-500 outline-none">
+                                    <input type="text" name="others_how_known" id="othersHowKnownInput" placeholder="Please specify" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-xs font-semibold focus:ring-2 focus:ring-blue-500 outline-none">
                                 </div>
                             </div>
                         </div>
@@ -563,16 +563,16 @@ $todayDate = date('Y-m-d');
                             </div>
                             <div>
                                 <label class="block text-xs font-bold text-slate-700 uppercase mb-1">CIVIL STATUS <span class="text-red-600">*</span></label>
-                                <select name="civil_status" required class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-xs font-semibold focus:ring-2 focus:ring-blue-500 outline-none">
+                                <select name="civil_status" id="civilStatusSelect" required onchange="toggleWifeNameField()" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-xs font-semibold focus:ring-2 focus:ring-blue-500 outline-none">
                                     <option value="Single">Single</option>
                                     <option value="Married">Married</option>
                                     <option value="Widowed">Widowed</option>
                                     <option value="Separated">Separated</option>
                                 </select>
                             </div>
-                            <div>
+                            <div id="wifeNameContainer" class="hidden">
                                 <label class="block text-xs font-bold text-slate-700 uppercase mb-1">WIFE'S NAME <span class="text-slate-400 font-normal">(if applicable)</span></label>
-                                <input type="text" name="wife_name" placeholder="Enter Spouse Name" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-xs font-semibold focus:ring-2 focus:ring-blue-500 outline-none">
+                                <input type="text" name="wife_name" id="wifeNameInput" placeholder="Enter Spouse Name" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-xs font-semibold focus:ring-2 focus:ring-blue-500 outline-none">
                             </div>
                         </div>
                     </div>
@@ -585,15 +585,36 @@ $todayDate = date('Y-m-d');
                         <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
                             <div>
                                 <label class="block text-xs font-bold text-slate-700 uppercase mb-1">PAG-IBIG NO.</label>
-                                <input type="text" name="pagibig_no" placeholder="Enter Pag-IBIG Number" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-xs font-semibold focus:ring-2 focus:ring-blue-500 outline-none">
+                                <input type="text" name="pagibig_no" id="pagibigNo" placeholder="e.g. 1234-5678-9012"
+                                    maxlength="14"
+                                    pattern="^(?:\d{4}-\d{4}-\d{4}|\d{12})?$"
+                                    title="Pag-IBIG Number must be 12 digits (format: 1234-5678-9012 or 12 consecutive digits)"
+                                    inputmode="numeric"
+                                    oninput="formatPagibig(this)"
+                                    class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-xs font-semibold focus:ring-2 focus:ring-blue-500 outline-none">
+                                <p class="text-[10px] text-slate-500 mt-1">12 digits (e.g. 1234-5678-9012)</p>
                             </div>
                             <div>
                                 <label class="block text-xs font-bold text-slate-700 uppercase mb-1">SSS NO.</label>
-                                <input type="text" name="sss_no" placeholder="Enter SSS Number" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-xs font-semibold focus:ring-2 focus:ring-blue-500 outline-none">
+                                <input type="text" name="sss_no" id="sssNo" placeholder="e.g. 01-2345678-9"
+                                    maxlength="12"
+                                    pattern="^(?:\d{2}-\d{7}-\d{1}|\d{10})?$"
+                                    title="SSS Number must be 10 digits (format: 01-2345678-9 or 10 consecutive digits)"
+                                    inputmode="numeric"
+                                    oninput="formatSss(this)"
+                                    class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-xs font-semibold focus:ring-2 focus:ring-blue-500 outline-none">
+                                <p class="text-[10px] text-slate-500 mt-1">10 digits (e.g. 01-2345678-9)</p>
                             </div>
                             <div>
                                 <label class="block text-xs font-bold text-slate-700 uppercase mb-1">PHILHEALTH NO.</label>
-                                <input type="text" name="philhealth_no" placeholder="Enter PhilHealth Number" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-xs font-semibold focus:ring-2 focus:ring-blue-500 outline-none">
+                                <input type="text" name="philhealth_no" id="philhealthNo" placeholder="e.g. 12-345678901-2"
+                                    maxlength="14"
+                                    pattern="^(?:\d{2}-\d{9}-\d{1}|\d{12})?$"
+                                    title="PhilHealth Number must be 12 digits (format: 12-345678901-2 or 12 consecutive digits)"
+                                    inputmode="numeric"
+                                    oninput="formatPhilhealth(this)"
+                                    class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-xs font-semibold focus:ring-2 focus:ring-blue-500 outline-none">
+                                <p class="text-[10px] text-slate-500 mt-1">12 digits (e.g. 12-345678901-2)</p>
                             </div>
                         </div>
                     </div>
@@ -1054,13 +1075,82 @@ $todayDate = date('Y-m-d');
             const select = document.getElementById('howKnownSelect');
             const referralField = document.getElementById('referralNameField');
             const othersField = document.getElementById('othersHowKnownField');
-            referralField.classList.add('hidden');
-            othersField.classList.add('hidden');
+            const referralInput = document.getElementById('referralNameInput');
+            const othersInput = document.getElementById('othersHowKnownInput');
+
+            if (!select || !referralField || !othersField) return;
+
             if (select.value === 'Referral / Recommendation') {
                 referralField.classList.remove('hidden');
-            } else if (select.value === 'Others') {
-                othersField.classList.remove('hidden');
+            } else {
+                referralField.classList.add('hidden');
+                if (referralInput) {
+                    referralInput.value = '';
+                }
             }
+
+            if (select.value === 'Others') {
+                othersField.classList.remove('hidden');
+            } else {
+                othersField.classList.add('hidden');
+                if (othersInput) {
+                    othersInput.value = '';
+                }
+            }
+        }
+
+        function toggleWifeNameField() {
+            const select = document.getElementById('civilStatusSelect');
+            const container = document.getElementById('wifeNameContainer');
+            const input = document.getElementById('wifeNameInput');
+            if (!select || !container) return;
+
+            if (select.value === 'Married') {
+                container.classList.remove('hidden');
+            } else {
+                container.classList.add('hidden');
+                if (input) {
+                    input.value = '';
+                    input.setCustomValidity('');
+                    input.classList.remove('border-red-500', 'bg-red-50');
+                }
+            }
+        }
+
+        function formatSss(input) {
+            if (!input) return;
+            var digits = input.value.replace(/\D/g, '').slice(0, 10);
+            var formatted = digits;
+            if (digits.length > 2 && digits.length <= 9) {
+                formatted = digits.slice(0, 2) + '-' + digits.slice(2);
+            } else if (digits.length > 9) {
+                formatted = digits.slice(0, 2) + '-' + digits.slice(2, 9) + '-' + digits.slice(9, 10);
+            }
+            input.value = formatted;
+        }
+
+        function formatPhilhealth(input) {
+            if (!input) return;
+            var digits = input.value.replace(/\D/g, '').slice(0, 12);
+            var formatted = digits;
+            if (digits.length > 2 && digits.length <= 11) {
+                formatted = digits.slice(0, 2) + '-' + digits.slice(2);
+            } else if (digits.length > 11) {
+                formatted = digits.slice(0, 2) + '-' + digits.slice(2, 11) + '-' + digits.slice(11, 12);
+            }
+            input.value = formatted;
+        }
+
+        function formatPagibig(input) {
+            if (!input) return;
+            var digits = input.value.replace(/\D/g, '').slice(0, 12);
+            var formatted = digits;
+            if (digits.length > 4 && digits.length <= 8) {
+                formatted = digits.slice(0, 4) + '-' + digits.slice(4);
+            } else if (digits.length > 8) {
+                formatted = digits.slice(0, 4) + '-' + digits.slice(4, 8) + '-' + digits.slice(8, 12);
+            }
+            input.value = formatted;
         }
 
         const stepOrder = ['terms', 'guide', 'personal', 'documents', 'shipboard', 'review'];
@@ -1211,6 +1301,9 @@ $todayDate = date('Y-m-d');
                 if (typeof toggleHowKnownFields === 'function') {
                     toggleHowKnownFields();
                 }
+                if (typeof toggleWifeNameField === 'function') {
+                    toggleWifeNameField();
+                }
 
                 if (draft.termsChecked) {
                     var tc = document.getElementById('termsCheck');
@@ -1353,6 +1446,8 @@ $todayDate = date('Y-m-d');
             }
 
             restoreFormDraft();
+            toggleWifeNameField();
+            toggleHowKnownFields();
         });
 
         function toggleCadetMode(isCadet) {
@@ -2071,7 +2166,7 @@ $todayDate = date('Y-m-d');
                         ${reviewField('Email Address', formData.get('email'))}
                         ${reviewField('Contact Number', formData.get('phone'))}
                         ${reviewField('Civil Status', formData.get('civil_status'))}
-                        ${reviewField("Wife's Name", formData.get('wife_name'))}
+                        ${formData.get('civil_status') === 'Married' ? reviewField("Wife's Name", formData.get('wife_name')) : ''}
                     </div>
                 </div>
 
