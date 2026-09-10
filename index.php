@@ -7,18 +7,101 @@
 
 session_start();
 
-// Handle Form Submission POST
+// Handle Form Submission POST with Strict Sanitization
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'submit_application') {
-    $_SESSION['application_data'] = $_POST;
+    $clean = [];
+
+    // Sanitize Single-Value Fields
+    $scalarFields = [
+        'position_applied', 'application_date', 'how_known', 'referral_name', 'others_how_known',
+        'last_name', 'first_name', 'middle_name', 'suffix', 'dob', 'pob', 'age', 'address',
+        'email', 'phone', 'civil_status', 'wife_name', 'pagibig_no', 'sss_no', 'philhealth_no',
+        'facebook', 'viber', 'whatsapp', 'skype', 'passport_no', 'passport_issue', 'passport_expiry',
+        'passport_place', 'sirb_no', 'sirb_issue', 'sirb_expiry', 'sirb_place', 'goc_no', 'goc_issue',
+        'goc_expiry', 'goc_place', 'coc_type', 'coc_no', 'coc_issue', 'coc_expiry', 'e_reg_no',
+        'sid_no', 'additional_details', 'is_cadet', 'photo_base64'
+    ];
+
+    foreach ($scalarFields as $field) {
+        $clean[$field] = isset($_POST[$field]) ? trim((string)$_POST[$field]) : '';
+    }
+
+    // Server-Side Minimum Age Verification
+    if (!empty($clean['dob'])) {
+        try {
+            $dobDate = new DateTime($clean['dob']);
+            $now = new DateTime();
+            $ageDiff = $now->diff($dobDate);
+            if ($ageDiff->y < 18) {
+                header('Location: index.php?step=terms&error=underage');
+                exit;
+            }
+            $clean['calculated_age'] = $ageDiff->y;
+        } catch (Exception $e) {
+            $clean['calculated_age'] = null;
+        }
+    }
+
+    // Normalize 1:N Training Certificates
+    $clean['certificates'] = [];
+    if (!empty($_POST['training_name']) && is_array($_POST['training_name'])) {
+        foreach ($_POST['training_name'] as $idx => $name) {
+            $nameTrim = trim((string)$name);
+            $noTrim = isset($_POST['training_no'][$idx]) ? trim((string)$_POST['training_no'][$idx]) : '';
+            if ($nameTrim !== '' || $noTrim !== '') {
+                $clean['certificates'][] = [
+                    'cert_name'   => $nameTrim,
+                    'cert_no'     => $noTrim,
+                    'issue_date'  => $_POST['training_issue'][$idx] ?? null,
+                    'expiry_date' => $_POST['training_expiry'][$idx] ?? null,
+                ];
+            }
+        }
+    }
+
+    // Normalize 1:N Sea Experiences
+    $clean['sea_service'] = [];
+    $isCadet = ($clean['is_cadet'] === '1');
+
+    if (!$isCadet && !empty($_POST['vessel_name']) && is_array($_POST['vessel_name'])) {
+        foreach ($_POST['vessel_name'] as $idx => $vessel) {
+            $vesselTrim = trim((string)$vessel);
+            if ($vesselTrim !== '') {
+                $clean['sea_service'][] = [
+                    'vessel_name'    => $vesselTrim,
+                    'principal_name' => trim($_POST['principal_name'][$idx] ?? ''),
+                    'flag'           => trim($_POST['vessel_flag'][$idx] ?? ''),
+                    'nationality'    => trim($_POST['vessel_nat'][$idx] ?? ''),
+                    'manning_agency' => trim($_POST['manning_agency'][$idx] ?? ''),
+                    'rank'           => trim($_POST['exp_rank'][$idx] ?? ''),
+                    'vessel_type'    => trim($_POST['vessel_type'][$idx] ?? ''),
+                    'grt'            => trim($_POST['vessel_grt'][$idx] ?? ''),
+                    'engine_power'   => trim($_POST['engine_power'][$idx] ?? ''),
+                    'salary_usd'     => trim($_POST['salary'][$idx] ?? ''),
+                    'date_from'      => $_POST['date_from'][$idx] ?? null,
+                    'date_to'        => $_POST['date_to'][$idx] ?? null,
+                ];
+            }
+        }
+    }
+
+    $_SESSION['application_data'] = $clean;
     $_SESSION['submitted_at'] = date('F j, Y, g:i a');
     header('Location: index.php?step=success');
     exit;
 }
 
 $step = $_GET['step'] ?? 'terms';
+
+// Guard against direct ?step=success URL visits when no session data exists
+if ($step === 'success' && empty($_SESSION['application_data'])) {
+    header('Location: index.php?step=terms');
+    exit;
+}
+
 $appData = $_SESSION['application_data'] ?? [];
 $submittedAt = $_SESSION['submitted_at'] ?? '';
-$todayDate = date('Y-m-d'); // used to cap date pickers so tomorrow/future dates are disabled
+$todayDate = date('Y-m-d');
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -77,9 +160,11 @@ $todayDate = date('Y-m-d'); // used to cap date pickers so tomorrow/future dates
     <main class="flex-1 py-8 px-4 sm:px-6 lg:px-8 max-w-6xl mx-auto w-full">
 
         <!-- Client-Side Form Wizard Handler -->
-        <form id="seafarerForm" action="index.php" method="POST" class="space-y-6">
+        <!-- Client-Side Form Wizard Handler -->
+        <form id="seafarerForm" action="index.php" method="POST" enctype="multipart/form-data" class="space-y-6">
             <input type="hidden" name="action" value="submit_application">
-
+            <input type="hidden" name="photo_base64" id="photoBase64">
+            <input type="hidden" name="is_cadet" id="isCadetInput" value="0">
             <!-- ================= STEP 0: TERMS & CONDITIONS ================= -->
             <div id="step-terms" class="step-page space-y-6 <?php echo $step !== 'terms' && $step !== '' ? 'hidden' : ''; ?>">
                 <div class="text-center space-y-1">
@@ -265,8 +350,12 @@ $todayDate = date('Y-m-d'); // used to cap date pickers so tomorrow/future dates
                             <div class="md:col-span-3 grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div>
                                     <label class="block text-xs font-bold text-slate-700 uppercase mb-1">POSITION APPLIED <span class="text-red-600">*</span></label>
-                                    <select name="position_applied" required class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-xs font-semibold focus:ring-2 focus:ring-blue-500 outline-none">
+                                    <select name="position_applied" id="positionApplied" required class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-xs font-semibold focus:ring-2 focus:ring-blue-500 outline-none">
                                         <option value="">Select Position...</option>
+                                        <optgroup label="Cadetship Program">
+                                            <option value="Deck Cadet">Deck Cadet</option>
+                                            <option value="Engine Cadet">Engine Cadet</option>
+                                        </optgroup>
                                         <optgroup label="Deck Department">
                                             <option value="Captain / Master">Captain / Master</option>
                                             <option value="Chief Mate">Chief Mate</option>
@@ -280,10 +369,12 @@ $todayDate = date('Y-m-d'); // used to cap date pickers so tomorrow/future dates
                                             <option value="Chief Engineer">Chief Engineer</option>
                                             <option value="2nd Engineer">2nd Engineer</option>
                                             <option value="3rd Engineer">3rd Engineer</option>
+                                            <option value="4th Engineer">4th Engineer</option>
+                                            <option value="Electro-Technical Officer (ETO)">Electro-Technical Officer (ETO)</option>
                                             <option value="Oiler / Motorman">Oiler / Motorman</option>
                                             <option value="Wiper">Wiper</option>
                                         </optgroup>
-                                        <optgroup label="Catering">
+                                        <optgroup label="Catering & Hospitality">
                                             <option value="Chief Cook">Chief Cook</option>
                                             <option value="Messman">Messman</option>
                                         </optgroup>
@@ -439,11 +530,14 @@ $todayDate = date('Y-m-d'); // used to cap date pickers so tomorrow/future dates
                             </div>
                             <div>
                                 <label class="block text-xs font-bold text-slate-700 uppercase mb-1">CONTACT NUMBER <span class="text-red-600">*</span></label>
-                                <input type="tel" name="phone" id="phoneInput" required placeholder="e.g. +1 202 555 0123"
+                                <input type="tel" name="phone" id="phoneInput" required 
+                                    placeholder="e.g. +63 917 123 4567"
+                                    pattern="^\+?[0-9\s\-\(\)]{7,20}$"
+                                    title="Please enter a valid phone number (7-20 digits, may include + prefix)."
                                     inputmode="tel"
                                     autocomplete="tel"
                                     class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-xs font-semibold focus:ring-2 focus:ring-blue-500 outline-none">
-                                <p class="text-[10px] text-slate-500 mt-1">Enter a complete contact number, including the country code when applicable.</p>
+                                <p class="text-[10px] text-slate-500 mt-1">Include country code (e.g. +63 for Philippines).</p>
                             </div>
                             <div>
                                 <label class="block text-xs font-bold text-slate-700 uppercase mb-1">CIVIL STATUS <span class="text-red-600">*</span></label>
@@ -559,31 +653,32 @@ $todayDate = date('Y-m-d'); // used to cap date pickers so tomorrow/future dates
                                     <tr>
                                         <td class="p-3 font-bold text-slate-900">PASSPORT</td>
                                         <td class="p-2"><input type="text" name="passport_no" required placeholder="Passport No." class="w-full p-2 border border-slate-300 rounded-lg"></td>
-                                        <td class="p-2"><input type="date" name="passport_issue" class="w-full p-2 border border-slate-300 rounded-lg"></td>
-                                        <td class="p-2"><input type="date" name="passport_expiry" class="w-full p-2 border border-slate-300 rounded-lg"></td>
+                                        <td class="p-2"><input type="date" name="passport_issue" id="passportIssue" max="<?php echo $todayDate; ?>" class="w-full p-2 border border-slate-300 rounded-lg" onchange="validateDatePair(this, document.getElementById('passportExpiry'), 'Passport', document.getElementById('passportDateError'))"></td>
+                                        <td class="p-2"><input type="date" name="passport_expiry" id="passportExpiry" class="w-full p-2 border border-slate-300 rounded-lg" onchange="validateDatePair(document.getElementById('passportIssue'), this, 'Passport', document.getElementById('passportDateError'))"></td>
                                         <td class="p-2"><input type="text" name="passport_place" required placeholder="Place Issued" class="w-full p-2 border border-slate-300 rounded-lg"></td>
                                     </tr>
+                                    <tr><td colspan="5" class="px-3 py-0"><p id="passportDateError" class="text-red-600 text-xs font-semibold hidden"></p></td></tr>
                                     <!-- Seaman's Book -->
                                     <tr>
                                         <td class="p-3 font-bold text-slate-900">SEAMAN'S BOOK</td>
                                         <td class="p-2"><input type="text" name="sirb_no" required placeholder="SIRB / SID No." class="w-full p-2 border border-slate-300 rounded-lg"></td>
-                                        <td class="p-2"><input type="date" name="sirb_issue" class="w-full p-2 border border-slate-300 rounded-lg"></td>
-                                        <td class="p-2"><input type="date" name="sirb_expiry" class="w-full p-2 border border-slate-300 rounded-lg"></td>
+                                        <td class="p-2"><input type="date" name="sirb_issue" id="sirbIssue" max="<?php echo $todayDate; ?>" class="w-full p-2 border border-slate-300 rounded-lg" onchange="validateDatePair(this, document.getElementById('sirbExpiry'), 'Seaman\'s Book', document.getElementById('sirbDateError'))"></td>
+                                        <td class="p-2"><input type="date" name="sirb_expiry" id="sirbExpiry" class="w-full p-2 border border-slate-300 rounded-lg" onchange="validateDatePair(document.getElementById('sirbIssue'), this, 'Seaman\'s Book', document.getElementById('sirbDateError'))"></td>
                                         <td class="p-2"><input type="text" name="sirb_place" required placeholder="Place Issued" class="w-full p-2 border border-slate-300 rounded-lg"></td>
                                     </tr>
+                                    <tr><td colspan="5" class="px-3 py-0"><p id="sirbDateError" class="text-red-600 text-xs font-semibold hidden"></p></td></tr>
                                     <!-- GOC License -->
                                     <tr>
                                         <td class="p-3 font-bold text-slate-900">GOC LICENSE</td>
                                         <td class="p-2"><input type="text" name="goc_no" placeholder="GOC License No." class="w-full p-2 border border-slate-300 rounded-lg"></td>
-                                        <td class="p-2"><input type="date" name="goc_issue" class="w-full p-2 border border-slate-300 rounded-lg"></td>
-                                        <td class="p-2"><input type="date" name="goc_expiry" class="w-full p-2 border border-slate-300 rounded-lg"></td>
+                                        <td class="p-2"><input type="date" name="goc_issue" id="gocIssue" max="<?php echo $todayDate; ?>" class="w-full p-2 border border-slate-300 rounded-lg" onchange="validateDatePair(this, document.getElementById('gocExpiry'), 'GOC License', document.getElementById('gocDateError'))"></td>
+                                        <td class="p-2"><input type="date" name="goc_expiry" id="gocExpiry" class="w-full p-2 border border-slate-300 rounded-lg" onchange="validateDatePair(document.getElementById('gocIssue'), this, 'GOC License', document.getElementById('gocDateError'))"></td>
                                         <td class="p-2"><input type="text" name="goc_place" placeholder="Place Issued" class="w-full p-2 border border-slate-300 rounded-lg"></td>
                                     </tr>
-                                    
+                                    <tr><td colspan="5" class="px-3 py-0"><p id="gocDateError" class="text-red-600 text-xs font-semibold hidden"></p></td></tr>
                                 </tbody>
                             </table>
                         </div>
-                    </div>
 
                     <!-- COC / License -->
                     <div class="space-y-4">
@@ -610,13 +705,14 @@ $todayDate = date('Y-m-d'); // used to cap date pickers so tomorrow/future dates
                             </div>
                             <div>
                                 <label class="block text-xs font-bold text-slate-700 uppercase mb-1">ISSUE DATE</label>
-                                <input type="date" name="coc_issue" class="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs">
+                                <input type="date" name="coc_issue" id="cocIssue" max="<?php echo $todayDate; ?>" class="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs" onchange="validateDatePair(this, document.getElementById('cocExpiry'), 'COC / License', document.getElementById('cocDateError'))">
                             </div>
                             <div>
                                 <label class="block text-xs font-bold text-slate-700 uppercase mb-1">EXPIRY DATE</label>
-                                <input type="date" name="coc_expiry" class="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs">
+                                <input type="date" name="coc_expiry" id="cocExpiry" class="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs" onchange="validateDatePair(document.getElementById('cocIssue'), this, 'COC / License', document.getElementById('cocDateError'))">
                             </div>
                         </div>
+                        <p id="cocDateError" class="text-red-600 text-xs font-semibold mt-2 hidden"></p>
                     </div>
 
                     <!-- E-Registration -->
@@ -644,12 +740,13 @@ $todayDate = date('Y-m-d'); // used to cap date pickers so tomorrow/future dates
                             </h3>
                         </div>
                         <div id="trainingContainer" class="space-y-3">
-                            <div class="grid grid-cols-1 sm:grid-cols-4 gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200">
+                            <div class="training-row grid grid-cols-1 sm:grid-cols-4 gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200">
                                 <input type="text" name="training_name[]" placeholder="Certificate Name (e.g. BST, ECDIS)" class="px-3 py-2 rounded-lg border border-slate-300 text-xs">
                                 <input type="text" name="training_no[]" placeholder="Certificate No." class="px-3 py-2 rounded-lg border border-slate-300 text-xs">
-                                <input type="date" name="training_issue[]" class="px-3 py-2 rounded-lg border border-slate-300 text-xs">
-                                <input type="date" name="training_expiry[]" class="px-3 py-2 rounded-lg border border-slate-300 text-xs">
+                                <input type="date" name="training_issue[]" max="<?php echo $todayDate; ?>" class="px-3 py-2 rounded-lg border border-slate-300 text-xs training-issue" onchange="validateTrainingDates(this)">
+                                <input type="date" name="training_expiry[]" class="px-3 py-2 rounded-lg border border-slate-300 text-xs training-expiry" onchange="validateTrainingDates(this)">
                             </div>
+                            <p class="training-date-error text-red-600 text-xs font-semibold hidden"></p>
                         </div>
 
                         <div class="flex items-center justify-between">
@@ -690,30 +787,51 @@ $todayDate = date('Y-m-d'); // used to cap date pickers so tomorrow/future dates
                 <!-- Main Form Container -->
                 <div class="bg-white/95 backdrop-blur-md rounded-3xl p-6 sm:p-8 shadow-2xl border border-white/60 space-y-8 text-slate-800">
                     
-                    <div class="space-y-4">
+                    <!-- Cadet / First-Timer Toggle -->
+                    <div class="bg-blue-50 border border-blue-200 rounded-2xl p-4 flex items-start sm:items-center justify-between gap-4">
+                        <div class="flex items-center gap-3">
+                            <input type="checkbox" id="cadetToggle" class="w-5 h-5 rounded border-blue-300 text-blue-600 focus:ring-blue-500 cursor-pointer accent-blue-600 shrink-0" onchange="toggleCadetMode(this.checked)">
+                            <div>
+                                <label for="cadetToggle" class="text-xs sm:text-sm font-bold text-blue-950 cursor-pointer select-none">
+                                    I am a First-Time Applicant / Cadet with No Prior Sea Experience
+                                </label>
+                                <p class="text-[11px] text-blue-700">Check this if you are a fresh maritime academy graduate applying for your first vessel assignment.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Sea Experience Section -->
+                    <div id="experienceSection" class="space-y-4">
                         <div class="flex items-center justify-between border-b border-slate-200 pb-2">
                             <h3 class="font-black text-slate-900 text-sm uppercase tracking-wider border-l-4 border-slate-900 pl-3">
-                                EXPERIENCES
+                                SEA SERVICE RECORDS
                             </h3>
-                            <button type="button" onclick="addExperienceRow()" class="bg-blue-600 text-white font-bold text-xs px-4 py-1.5 rounded-lg hover:bg-blue-700">
+                            <button type="button" onclick="addExperienceRow()" id="addExpBtn" class="bg-blue-600 text-white font-bold text-xs px-4 py-1.5 rounded-lg hover:bg-blue-700 shadow-sm">
                                 + ADD EXPERIENCE
                             </button>
                         </div>
-                    <p id="experienceError" class="hidden text-red-600 text-xs font-semibold mt-2">
-                        Please fill out all fields in the current Experience before adding a new one.
-                    </p>
+                        <p id="experienceError" class="hidden text-red-600 text-xs font-semibold mt-2 bg-red-50 p-2.5 rounded-xl border border-red-200">
+                            &#9888; Please complete the required fields (Vessel Name, Rank, Date From) before adding another record.
+                        </p>
                         <div id="experienceContainer" class="space-y-6">
                             <!-- Experience Entry #1 -->
-                            <div class="bg-slate-50 p-5 rounded-2xl border border-slate-200 space-y-4">
-                                <p class="text-xs font-black text-blue-700 uppercase">EXPERIENCE #1 <span class="text-red-600">*</span> </p>
+                            <div class="experience-card bg-slate-50 p-5 rounded-2xl border border-slate-200 space-y-4">
+                                <div class="flex items-center justify-between">
+                                    <p class="text-xs font-black text-blue-700 uppercase exp-title">
+                                        EXPERIENCE #1 <span class="text-red-600 exp-required-mark">*</span>
+                                    </p>
+                                    <button type="button" onclick="clearOrRemoveFirstExp(this)" class="text-slate-400 hover:text-red-600 text-xs font-bold transition-colors">
+                                        &#x2715; Clear
+                                    </button>
+                                </div>
                                 <div class="grid grid-cols-1 sm:grid-cols-4 gap-4 text-xs">
                                     <div>
                                         <label class="block font-bold text-slate-700 mb-1">PRINCIPAL NAME</label>
                                         <input type="text" name="principal_name[]" placeholder="e.g. Evergreen Marine" class="w-full p-2.5 rounded-xl border border-slate-300">
                                     </div>
                                     <div>
-                                        <label class="block font-bold text-slate-700 mb-1">VESSEL NAME <span class="text-red-600">*</span></label>
-                                        <input type="text" name="vessel_name[]" required placeholder="e.g. M/V Crystal Grace" class="w-full p-2.5 rounded-xl border border-slate-300">
+                                        <label class="block font-bold text-slate-700 mb-1">VESSEL NAME <span class="text-red-600 exp-required-mark">*</span></label>
+                                        <input type="text" name="vessel_name[]" placeholder="e.g. M/V Crystal Grace" class="w-full p-2.5 rounded-xl border border-slate-300 exp-req">
                                     </div>
                                     <div>
                                         <label class="block font-bold text-slate-700 mb-1">FLAG</label>
@@ -723,35 +841,33 @@ $todayDate = date('Y-m-d'); // used to cap date pickers so tomorrow/future dates
                                         <label class="block font-bold text-slate-700 mb-1">NATIONALITY</label>
                                         <input type="text" name="vessel_nat[]" placeholder="e.g. Japanese" class="w-full p-2.5 rounded-xl border border-slate-300">
                                     </div>
-
                                     <div>
                                         <label class="block font-bold text-slate-700 mb-1">MANNING AGENCY</label>
                                         <input type="text" name="manning_agency[]" placeholder="Agency Name" class="w-full p-2.5 rounded-xl border border-slate-300">
                                     </div>
                                     <div>
-                                        <label class="block font-bold text-slate-700 mb-1">RANK</label>
-                                        <input type="text" name="exp_rank[]" placeholder="Rank Onboard" class="w-full p-2.5 rounded-xl border border-slate-300">
+                                        <label class="block font-bold text-slate-700 mb-1">RANK <span class="text-red-600 exp-required-mark">*</span></label>
+                                        <input type="text" name="exp_rank[]" placeholder="Rank Onboard" class="w-full p-2.5 rounded-xl border border-slate-300 exp-req">
                                     </div>
                                     <div>
                                         <label class="block font-bold text-slate-700 mb-1">VESSEL TYPE</label>
-                                        <input type="text" name="vessel_type[]" placeholder="Container / Tanker" class="w-full p-2.5 rounded-xl border border-slate-300">
+                                        <input type="text" name="vessel_type[]" placeholder="Container / Bulk Carrier" class="w-full p-2.5 rounded-xl border border-slate-300">
                                     </div>
                                     <div>
                                         <label class="block font-bold text-slate-700 mb-1">GRT</label>
                                         <input type="text" name="vessel_grt[]" placeholder="Gross Tonnage" class="w-full p-2.5 rounded-xl border border-slate-300">
                                     </div>
-
                                     <div>
                                         <label class="block font-bold text-slate-700 mb-1">KW/BHP</label>
-                                        <input type="text" name="engine_power[]" placeholder="Engine Power" class="w-full p-2.5 rounded-xl border border-slate-300">
+                                        <input type="text" name="engine_power[]" placeholder="Engine Output" class="w-full p-2.5 rounded-xl border border-slate-300">
                                     </div>
                                     <div>
                                         <label class="block font-bold text-slate-700 mb-1">SALARY (USD)</label>
                                         <input type="text" name="salary[]" placeholder="Monthly Salary" class="w-full p-2.5 rounded-xl border border-slate-300">
                                     </div>
                                     <div>
-                                        <label class="block font-bold text-slate-700 mb-1">DATE FROM</label>
-                                        <input type="date" name="date_from[]" class="w-full p-2.5 rounded-xl border border-slate-300">
+                                        <label class="block font-bold text-slate-700 mb-1">DATE FROM <span class="text-red-600 exp-required-mark">*</span></label>
+                                        <input type="date" name="date_from[]" class="w-full p-2.5 rounded-xl border border-slate-300 exp-req">
                                     </div>
                                     <div>
                                         <label class="block font-bold text-slate-700 mb-1">DATE TO</label>
@@ -904,6 +1020,7 @@ $todayDate = date('Y-m-d'); // used to cap date pickers so tomorrow/future dates
     </footer>
 
     <!-- JavaScript Navigation & Dynamics -->
+    <!-- JavaScript Navigation & Dynamics -->
     <script>
         function toggleTermsBtn() {
             const check = document.getElementById('termsCheck');
@@ -915,10 +1032,8 @@ $todayDate = date('Y-m-d'); // used to cap date pickers so tomorrow/future dates
             const select = document.getElementById('howKnownSelect');
             const referralField = document.getElementById('referralNameField');
             const othersField = document.getElementById('othersHowKnownField');
-
             referralField.classList.add('hidden');
             othersField.classList.add('hidden');
-
             if (select.value === 'Referral / Recommendation') {
                 referralField.classList.remove('hidden');
             } else if (select.value === 'Others') {
@@ -926,328 +1041,395 @@ $todayDate = date('Y-m-d'); // used to cap date pickers so tomorrow/future dates
             }
         }
 
-        // Order of steps used to calculate how full the header progress bar should be.
-        // "terms" is intentionally excluded — the bar stays empty until the user
-        // proceeds past Terms & Conditions, then starts counting from "guide" onward.
-        const stepOrder = ['guide', 'personal', 'documents', 'shipboard', 'review'];
+        const stepOrder = ['terms', 'guide', 'personal', 'documents', 'shipboard', 'review'];
+        let isSubmitting = false;
 
         function updateHeaderProgress(stepId) {
             const bar = document.getElementById('headerProgressBar');
             if (!bar) return;
-
-            if (stepId === 'terms') {
-                bar.style.width = '0%';
-                return;
-            }
-
-            const idx = stepOrder.indexOf(stepId);
-            if (idx === -1) {
-                // Not a wizard step (e.g. success page) — treat as fully complete
-                bar.style.width = '100%';
-                return;
-            }
-
-            const pct = ((idx + 1) / stepOrder.length) * 100;
+            if (stepId === 'terms') { bar.style.width = '0%'; return; }
+            const wizardSteps = ['guide', 'personal', 'documents', 'shipboard', 'review'];
+            const idx = wizardSteps.indexOf(stepId);
+            if (idx === -1) { bar.style.width = '100%'; return; }
+            const pct = ((idx + 1) / wizardSteps.length) * 100;
             bar.style.width = pct + '%';
         }
 
-        function goToStep(stepId) {
-            document.querySelectorAll('.step-page').forEach(el => el.classList.add('hidden'));
+        function goToStep(stepId, pushHistory) {
+            if (pushHistory === undefined) pushHistory = true;
             const target = document.getElementById('step-' + stepId);
-            if (target) {
-                target.classList.remove('hidden');
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-            }
-            if (stepId === 'review') {
-                showReviewTab('personal');
-                populateReview();
-            }
+            if (!target) return;
+            document.querySelectorAll('.step-page').forEach(function(el) { el.classList.add('hidden'); });
+            target.classList.remove('hidden');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            if (stepId === 'review') { showReviewTab('personal'); populateReview(); }
             updateHeaderProgress(stepId);
+            if (pushHistory && window.history) {
+                var newUrl = window.location.pathname + '?step=' + stepId;
+                window.history.pushState({ step: stepId }, '', newUrl);
+            }
         }
 
-        // Set the initial progress bar fill based on whichever step is showing on page load
-        document.addEventListener('DOMContentLoaded', function() {
-            const visibleStep = document.querySelector('.step-page:not(.hidden)');
-            if (visibleStep) {
-                updateHeaderProgress(visibleStep.id.replace('step-', ''));
+        window.addEventListener('popstate', function(e) {
+            if (e.state && e.state.step) {
+                goToStep(e.state.step, false);
             } else {
-                // No wizard step visible means we're on the success page
-                updateHeaderProgress('success');
+                var params = new URLSearchParams(window.location.search);
+                var step = params.get('step') || 'terms';
+                goToStep(step, false);
             }
         });
 
-        function validateExperiences() {
+        document.addEventListener('DOMContentLoaded', function() {
+            var params = new URLSearchParams(window.location.search);
+            var initialStep = params.get('step') || 'terms';
+            if (initialStep === 'success') return;
+            if (!document.getElementById('step-' + initialStep)) { initialStep = 'terms'; }
+            document.querySelectorAll('.step-page').forEach(function(el) { el.classList.add('hidden'); });
+            var startElement = document.getElementById('step-' + initialStep);
+            if (startElement) { startElement.classList.remove('hidden'); updateHeaderProgress(initialStep); }
+            if (window.history.state === null) {
+                window.history.replaceState({ step: initialStep }, '', window.location.href);
+            }
+            var posSelect = document.getElementById('positionApplied');
+            if (posSelect) {
+                posSelect.addEventListener('change', function() {
+                    if (this.value === 'Deck Cadet' || this.value === 'Engine Cadet') {
+                        var cadetCheck = document.getElementById('cadetToggle');
+                        if (cadetCheck && !cadetCheck.checked) {
+                            cadetCheck.checked = true;
+                            toggleCadetMode(true);
+                        }
+                    }
+                });
+            }
+        });
 
-            const experiences = document.querySelectorAll("#experienceContainer > div");
-            const errorMsg = document.getElementById("experienceError");
-            errorMsg.classList.add("hidden");
-            for (const experience of experiences) {
-                const fields = experience.querySelectorAll("input, select, textarea");
-                for (const field of fields) {
-                    if (field.value.trim() === "") {
-                        errorMsg.classList.remove("hidden");
-                        field.focus();
+        function toggleCadetMode(isCadet) {
+            var expSection = document.getElementById('experienceSection');
+            var isCadetField = document.getElementById('isCadetInput');
+            var expReqMarks = document.querySelectorAll('.exp-required-mark');
+            var expReqInputs = document.querySelectorAll('.exp-req');
+            var errorMsg = document.getElementById('experienceError');
+            isCadetField.value = isCadet ? '1' : '0';
+            if (isCadet) {
+                expSection.classList.add('opacity-50', 'pointer-events-none');
+                expReqMarks.forEach(function(el) { el.classList.add('hidden'); });
+                expReqInputs.forEach(function(el) { el.required = false; el.setCustomValidity(''); });
+                if (errorMsg) errorMsg.classList.add('hidden');
+            } else {
+                expSection.classList.remove('opacity-50', 'pointer-events-none');
+                expReqMarks.forEach(function(el) { el.classList.remove('hidden'); });
+                expReqInputs.forEach(function(el) { el.required = true; });
+            }
+        }
+
+        function validateDatePair(issueInput, expiryInput, docLabel, errorEl) {
+            var issueVal = issueInput ? issueInput.value : '';
+            var expiryVal = expiryInput ? expiryInput.value : '';
+            var today = new Date();
+            today.setHours(0, 0, 0, 0);
+            [issueInput, expiryInput].forEach(function(inp) {
+                if (!inp) return;
+                inp.classList.remove('border-red-500', 'bg-red-50', 'border-amber-500');
+                inp.setCustomValidity('');
+            });
+            if (errorEl) { errorEl.classList.add('hidden'); errorEl.textContent = ''; }
+            if (issueVal) {
+                var issueDate = new Date(issueVal);
+                if (issueDate > today) {
+                    var msg = docLabel + ': Issue date cannot be in the future.';
+                    if (issueInput) { issueInput.classList.add('border-red-500', 'bg-red-50'); issueInput.setCustomValidity(msg); }
+                    if (errorEl) { errorEl.textContent = '\u26A0 ' + msg; errorEl.classList.remove('hidden'); }
+                    return false;
+                }
+            }
+            if (issueVal && expiryVal) {
+                var issueDateC = new Date(issueVal);
+                var expiryDate = new Date(expiryVal);
+                if (expiryDate <= issueDateC) {
+                    var msg2 = docLabel + ': Expiry date must be later than the issue date.';
+                    if (expiryInput) { expiryInput.classList.add('border-red-500', 'bg-red-50'); expiryInput.setCustomValidity(msg2); }
+                    if (errorEl) { errorEl.textContent = '\u26A0 ' + msg2; errorEl.classList.remove('hidden'); }
+                    return false;
+                }
+            }
+            if (expiryVal) {
+                var expiryDateW = new Date(expiryVal);
+                if (expiryDateW < today && expiryInput) { expiryInput.classList.add('border-amber-500'); }
+            }
+            return true;
+        }
+
+        function validateTrainingDates(changedInput) {
+            var row = changedInput.closest('.training-row');
+            if (!row) return;
+            var issueInput = row.querySelector('.training-issue');
+            var expiryInput = row.querySelector('.training-expiry');
+            var errorEl = null;
+            var parent = row.parentElement;
+            if (parent) {
+                errorEl = parent.querySelector('.training-date-error');
+                if (!errorEl) errorEl = row.nextElementSibling;
+                if (errorEl && !errorEl.classList.contains('training-date-error')) errorEl = null;
+            }
+            var certName = row.querySelector('input[name="training_name[]"]');
+            var label = (certName && certName.value.trim()) ? certName.value.trim() : 'Training Certificate';
+            validateDatePair(issueInput, expiryInput, label, errorEl);
+        }
+
+        function validateAllDocumentDates() {
+            var allValid = true;
+            var docPairs = [
+                { issue: 'passportIssue', expiry: 'passportExpiry', label: 'Passport', error: 'passportDateError' },
+                { issue: 'sirbIssue', expiry: 'sirbExpiry', label: "Seaman's Book", error: 'sirbDateError' },
+                { issue: 'gocIssue', expiry: 'gocExpiry', label: 'GOC License', error: 'gocDateError' },
+                { issue: 'cocIssue', expiry: 'cocExpiry', label: 'COC / License', error: 'cocDateError' }
+            ];
+            for (var p = 0; p < docPairs.length; p++) {
+                var pair = docPairs[p];
+                var issueEl = document.getElementById(pair.issue);
+                var expiryEl = document.getElementById(pair.expiry);
+                var errorEl = document.getElementById(pair.error);
+                if ((issueEl && issueEl.value) || (expiryEl && expiryEl.value)) {
+                    if (!validateDatePair(issueEl, expiryEl, pair.label, errorEl)) {
+                        if (allValid) { (issueEl || expiryEl).scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+                        allValid = false;
+                    }
+                }
+            }
+            var trainingRows = document.querySelectorAll('.training-row');
+            trainingRows.forEach(function(row) {
+                var tIssue = row.querySelector('.training-issue');
+                var tExpiry = row.querySelector('.training-expiry');
+                if ((tIssue && tIssue.value) || (tExpiry && tExpiry.value)) {
+                    var cName = row.querySelector('input[name="training_name[]"]');
+                    var lbl = (cName && cName.value.trim()) ? cName.value.trim() : 'Training Certificate';
+                    var tErr = null;
+                    var tParent = row.parentElement;
+                    if (tParent) tErr = tParent.querySelector('.training-date-error');
+                    if (!validateDatePair(tIssue, tExpiry, lbl, tErr)) {
+                        if (allValid) { tIssue.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+                        allValid = false;
+                    }
+                }
+            });
+            return allValid;
+        }
+
+        function validateExperiences() {
+            var isCadet = document.getElementById('isCadetInput').value === '1';
+            if (isCadet) return true;
+            var experiences = document.querySelectorAll('#experienceContainer > .experience-card');
+            var errorMsg = document.getElementById('experienceError');
+            if (errorMsg) errorMsg.classList.add('hidden');
+            for (var i = 0; i < experiences.length; i++) {
+                var reqFields = experiences[i].querySelectorAll('.exp-req');
+                for (var j = 0; j < reqFields.length; j++) {
+                    if (reqFields[j].value.trim() === '') {
+                        if (errorMsg) errorMsg.classList.remove('hidden');
+                        reqFields[j].focus();
                         return false;
                     }
                 }
             }
+            return validateDateRanges();
+        }
+
+        function validateDateRanges() {
+            var dateFromFields = document.querySelectorAll('input[name="date_from[]"]');
+            var dateToFields = document.querySelectorAll('input[name="date_to[]"]');
+            for (var i = 0; i < dateFromFields.length; i++) {
+                var from = dateFromFields[i].value;
+                var to = dateToFields[i] ? dateToFields[i].value : '';
+                if (from && to && new Date(to) < new Date(from)) {
+                    alert('Experience #' + (i + 1) + ': "Date To" cannot be earlier than "Date From".');
+                    dateToFields[i].focus();
+                    return false;
+                }
+            }
             return true;
         }
-        // Blocks navigation to the next step if any required (*) field on the
-        // CURRENT visible step is empty/invalid, or if age validation fails.
+
         function goToNextStep(nextStepId) {
-            // Find the currently visible step only
-            const currentStep = document.querySelector('.step-page:not(.hidden)');
-
-            if (!currentStep) {
-                goToStep(nextStepId);
-                return;
-            }
-
-            // Check only inputs/selects/textareas inside the current step
-            const fields = currentStep.querySelectorAll(
-                'input, select, textarea'
-             );
-
-             for (const field of fields) {
-                if (!field.checkValidity()) {
-                    field.reportValidity();
+            var currentStep = document.querySelector('.step-page:not(.hidden)');
+            if (!currentStep) { goToStep(nextStepId); return; }
+            var fields = currentStep.querySelectorAll('input:not([type="hidden"]):not([type="checkbox"]), select, textarea');
+            for (var i = 0; i < fields.length; i++) {
+                if (fields[i].offsetParent !== null && !fields[i].checkValidity()) {
+                    fields[i].reportValidity();
                     return;
                 }
             }
-
-            // Leaving Shipboard?
-                if (nextStepId === "review") {
-
-                    if (!validateExperiences()) {
-                        return;
-                    }
-
+            if (currentStep.id === 'step-documents') {
+                if (!validateAllDocumentDates()) return;
+            }
+            if (currentStep.id === 'step-shipboard') {
+                if (!validateExperiences()) return;
+                var certify = document.getElementById('certifyCheck');
+                if (certify && !certify.checked) {
+                    alert('Please certify that all information is correct before proceeding.');
+                    certify.focus();
+                    return;
                 }
-
-            // Current step is valid, so proceed
+            }
             goToStep(nextStepId);
         }
 
         function previewPhoto(event) {
-            const input = event.target;
-            const file = input.files[0];
+            var input = event.target;
+            var file = input.files[0];
             if (!file) return;
-
-            const maxSizeBytes = 10 * 1024 * 1024; // 10MB
-
             if (!file.type.startsWith('image/')) {
-                alert('Please upload an image file only (JPG, PNG, etc.).');
+                alert('Please upload an image file only (JPG, PNG, WebP).');
                 input.value = '';
                 return;
             }
-
-            if (file.size > maxSizeBytes) {
-                alert('Image is too large. Maximum file size is 10MB.');
-                input.value = '';
-                return;
-            }
-
-            const reader = new FileReader();
+            var reader = new FileReader();
             reader.onload = function(e) {
-                document.getElementById('photoPreview').innerHTML = `
-                    <img src="${e.target.result}" class="w-24 h-24 object-cover rounded-xl shadow-md border-2 border-white mb-1">
-                    <span class="text-[10px] text-blue-600 font-bold">Change Photo</span>
-                `;
-            }
+                var img = new Image();
+                img.onload = function() {
+                    var canvas = document.createElement('canvas');
+                    var MAX_DIM = 800;
+                    var width = img.width;
+                    var height = img.height;
+                    if (width > height && width > MAX_DIM) {
+                        height = Math.round((height * MAX_DIM) / width);
+                        width = MAX_DIM;
+                    } else if (height > MAX_DIM) {
+                        width = Math.round((width * MAX_DIM) / height);
+                        height = MAX_DIM;
+                    }
+                    canvas.width = width;
+                    canvas.height = height;
+                    var ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+                    var compressedDataUrl = canvas.toDataURL('image/jpeg', 0.85);
+                    document.getElementById('photoBase64').value = compressedDataUrl;
+                    document.getElementById('photoPreview').innerHTML = '<img src="' + compressedDataUrl + '" class="w-24 h-24 object-cover rounded-xl shadow-md border-2 border-white mb-1"><span class="text-[10px] text-blue-600 font-bold">Change Photo</span>';
+                };
+                img.src = e.target.result;
+            };
             reader.readAsDataURL(file);
         }
 
-        const MAX_TRAINING_ROWS = 5;
+        var MAX_TRAINING_ROWS = 5;
 
-            function addTrainingRow() {
-                const container = document.getElementById('trainingContainer');
-                const rowCount = container.children.length;
-
-                if (rowCount >= MAX_TRAINING_ROWS) {
-                    document.getElementById('training_limit_msg').classList.remove('hidden');
-                    document.getElementById('addTrainingBtn').disabled = true;
-                    document.getElementById('addTrainingBtn').classList.add('opacity-50', 'cursor-not-allowed');
-                    return;
-                }
-
-                const div = document.createElement('div');
-                div.className = 'relative grid grid-cols-1 sm:grid-cols-4 gap-3 bg-slate-50 p-3 pt-7 rounded-xl border border-slate-200';
-                div.innerHTML = `
-                    <input type="text" name="training_name[]" placeholder="Certificate Name" class="px-3 py-2 rounded-lg border border-slate-300 text-xs">
-                    <input type="text" name="training_no[]" placeholder="Certificate No." class="px-3 py-2 rounded-lg border border-slate-300 text-xs">
-                    <input type="date" name="training_issue[]" class="px-3 py-2 rounded-lg border border-slate-300 text-xs">
-                    <input type="date" name="training_expiry[]" class="px-3 py-2 rounded-lg border border-slate-300 text-xs">
-                `;
-
-                // Add a remove button, positioned top-right of the row
-                const removeBtn = document.createElement('button');
-                removeBtn.type = 'button';
-                removeBtn.innerHTML = '✕ Remove';
-                removeBtn.className = 'absolute top-2 right-3 text-red-600 text-xs font-bold hover:underline';
-                removeBtn.onclick = function() {
-                    if (confirm('Are you sure you want to remove this certificate?')) {
-                    div.remove();
-                    checkTrainingLimit();
-                    }
-                };
-                div.appendChild(removeBtn);
-
-                container.appendChild(div);
-                checkTrainingLimit();
+        function addTrainingRow() {
+            var container = document.getElementById('trainingContainer');
+            var rowCount = container.querySelectorAll('.training-row').length;
+            if (rowCount >= MAX_TRAINING_ROWS) {
+                document.getElementById('training_limit_msg').classList.remove('hidden');
+                document.getElementById('addTrainingBtn').disabled = true;
+                document.getElementById('addTrainingBtn').classList.add('opacity-50', 'cursor-not-allowed');
+                return;
             }
+            var wrapper = document.createElement('div');
+            wrapper.className = 'training-row-wrapper';
+            var div = document.createElement('div');
+            div.className = 'training-row relative grid grid-cols-1 sm:grid-cols-4 gap-3 bg-slate-50 p-3 pt-7 rounded-xl border border-slate-200';
+            div.innerHTML = '<input type="text" name="training_name[]" placeholder="Certificate Name" class="px-3 py-2 rounded-lg border border-slate-300 text-xs">' +
+                '<input type="text" name="training_no[]" placeholder="Certificate No." class="px-3 py-2 rounded-lg border border-slate-300 text-xs">' +
+                '<input type="date" name="training_issue[]" class="px-3 py-2 rounded-lg border border-slate-300 text-xs training-issue" onchange="validateTrainingDates(this)">' +
+                '<input type="date" name="training_expiry[]" class="px-3 py-2 rounded-lg border border-slate-300 text-xs training-expiry" onchange="validateTrainingDates(this)">';
+            var errorP = document.createElement('p');
+            errorP.className = 'training-date-error text-red-600 text-xs font-semibold hidden';
+            var removeBtn = document.createElement('button');
+            removeBtn.type = 'button';
+            removeBtn.innerHTML = '\u2715 Remove';
+            removeBtn.className = 'absolute top-2 right-3 text-red-600 text-xs font-bold hover:underline';
+            removeBtn.onclick = function() {
+                if (confirm('Remove this certificate?')) { wrapper.remove(); checkTrainingLimit(); }
+            };
+            div.appendChild(removeBtn);
+            wrapper.appendChild(div);
+            wrapper.appendChild(errorP);
+            container.appendChild(wrapper);
+            checkTrainingLimit();
+        }
 
-            function checkTrainingLimit() {
-                const container = document.getElementById('trainingContainer');
-                const rowCount = container.children.length;
-                const addBtn = document.getElementById('addTrainingBtn');
-                const limitMsg = document.getElementById('training_limit_msg');
+        function checkTrainingLimit() {
+            var container = document.getElementById('trainingContainer');
+            var rowCount = container.querySelectorAll('.training-row').length;
+            var addBtn = document.getElementById('addTrainingBtn');
+            var limitMsg = document.getElementById('training_limit_msg');
+            if (rowCount >= MAX_TRAINING_ROWS) {
+                addBtn.disabled = true;
+                addBtn.classList.add('opacity-50', 'cursor-not-allowed');
+                limitMsg.classList.remove('hidden');
+            } else {
+                addBtn.disabled = false;
+                addBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                limitMsg.classList.add('hidden');
+            }
+        }
 
-                if (rowCount >= MAX_TRAINING_ROWS) {
-                    addBtn.disabled = true;
-                    addBtn.classList.add('opacity-50', 'cursor-not-allowed');
-                    limitMsg.classList.remove('hidden');
-                } else {
-                    addBtn.disabled = false;
-                    addBtn.classList.remove('opacity-50', 'cursor-not-allowed');
-                    limitMsg.classList.add('hidden');
+        function addExperienceRow() {
+            var isCadet = document.getElementById('isCadetInput').value === '1';
+            if (isCadet) { alert('Cadet mode is active. Disable it to add sea service records.'); return; }
+            var container = document.getElementById('experienceContainer');
+            var lastExp = container.lastElementChild;
+            var errorMsg = document.getElementById('experienceError');
+            if (errorMsg) errorMsg.classList.add('hidden');
+            if (lastExp) {
+                var reqFields = lastExp.querySelectorAll('.exp-req');
+                for (var i = 0; i < reqFields.length; i++) {
+                    if (reqFields[i].value.trim() === '') {
+                        if (errorMsg) errorMsg.classList.remove('hidden');
+                        reqFields[i].focus();
+                        return;
+                    }
                 }
             }
+            var count = container.children.length + 1;
+            var div = document.createElement('div');
+            div.className = 'experience-card bg-slate-50 p-5 rounded-2xl border border-slate-200 space-y-4';
+            div.innerHTML = '<div class="flex items-center justify-between"><p class="text-xs font-black text-blue-700 uppercase exp-title">EXPERIENCE #' + count + ' <span class="text-red-600 exp-required-mark">*</span></p><button type="button" class="remove-experience-btn text-red-600 text-xs font-bold hover:underline">\u2715 Remove</button></div>' +
+                '<div class="grid grid-cols-1 sm:grid-cols-4 gap-4 text-xs">' +
+                '<div><label class="block font-bold text-slate-700 mb-1">PRINCIPAL NAME</label><input type="text" name="principal_name[]" placeholder="e.g. Evergreen Marine" class="w-full p-2.5 rounded-xl border border-slate-300"></div>' +
+                '<div><label class="block font-bold text-slate-700 mb-1">VESSEL NAME <span class="text-red-600 exp-required-mark">*</span></label><input type="text" name="vessel_name[]" required placeholder="e.g. M/V Star" class="w-full p-2.5 rounded-xl border border-slate-300 exp-req"></div>' +
+                '<div><label class="block font-bold text-slate-700 mb-1">FLAG</label><input type="text" name="vessel_flag[]" placeholder="e.g. Panama" class="w-full p-2.5 rounded-xl border border-slate-300"></div>' +
+                '<div><label class="block font-bold text-slate-700 mb-1">NATIONALITY</label><input type="text" name="vessel_nat[]" placeholder="e.g. Japanese" class="w-full p-2.5 rounded-xl border border-slate-300"></div>' +
+                '<div><label class="block font-bold text-slate-700 mb-1">MANNING AGENCY</label><input type="text" name="manning_agency[]" placeholder="Agency" class="w-full p-2.5 rounded-xl border border-slate-300"></div>' +
+                '<div><label class="block font-bold text-slate-700 mb-1">RANK <span class="text-red-600 exp-required-mark">*</span></label><input type="text" name="exp_rank[]" required placeholder="Rank" class="w-full p-2.5 rounded-xl border border-slate-300 exp-req"></div>' +
+                '<div><label class="block font-bold text-slate-700 mb-1">VESSEL TYPE</label><input type="text" name="vessel_type[]" placeholder="Vessel Type" class="w-full p-2.5 rounded-xl border border-slate-300"></div>' +
+                '<div><label class="block font-bold text-slate-700 mb-1">GRT</label><input type="text" name="vessel_grt[]" placeholder="GRT" class="w-full p-2.5 rounded-xl border border-slate-300"></div>' +
+                '<div><label class="block font-bold text-slate-700 mb-1">KW/BHP</label><input type="text" name="engine_power[]" placeholder="KW/BHP" class="w-full p-2.5 rounded-xl border border-slate-300"></div>' +
+                '<div><label class="block font-bold text-slate-700 mb-1">SALARY (USD)</label><input type="text" name="salary[]" placeholder="Salary" class="w-full p-2.5 rounded-xl border border-slate-300"></div>' +
+                '<div><label class="block font-bold text-slate-700 mb-1">DATE FROM <span class="text-red-600 exp-required-mark">*</span></label><input type="date" name="date_from[]" required class="w-full p-2.5 rounded-xl border border-slate-300 exp-req"></div>' +
+                '<div><label class="block font-bold text-slate-700 mb-1">DATE TO</label><input type="date" name="date_to[]" class="w-full p-2.5 rounded-xl border border-slate-300"></div>' +
+                '</div>';
+            var removeBtn2 = div.querySelector('.remove-experience-btn');
+            removeBtn2.addEventListener('click', function() {
+                if (confirm('Remove this sea service entry?')) { div.remove(); renumberExperiences(); }
+            });
+            container.appendChild(div);
+        }
 
-            function addExperienceRow() {
+        function clearOrRemoveFirstExp(btn) {
+            var card = btn.closest('.experience-card');
+            var inputs = card.querySelectorAll('input');
+            inputs.forEach(function(input) { input.value = ''; });
+        }
 
-                const container = document.getElementById('experienceContainer');
-
-                // Validate the current (last) experience before adding another
-                const errorMsg = document.getElementById("experienceError");
-                errorMsg.classList.add("hidden");
-
-                const lastExperience = container.lastElementChild;
-
-                if (lastExperience) {
-                    const fields = lastExperience.querySelectorAll("input, select, textarea");
-
-                    for (const field of fields) {
-                        if (field.value.trim() === "") {
-                            errorMsg.classList.remove("hidden");
-                            field.focus();
-                            return;
-                        }
-                    }
-                }
-
-                const count = container.children.length + 1;
-                const div = document.createElement('div');
-                div.className = 'bg-slate-50 p-5 rounded-2xl border border-slate-200 space-y-4';
-
-                div.innerHTML = `
-                    <div class="flex items-center justify-between">
-                        <p class="text-xs font-black text-blue-700 uppercase">
-                            EXPERIENCE #${count} <span class="text-red-600">*</span>
-                        </p>
-                        <button type="button" class="remove-experience-btn text-red-600 text-xs font-bold hover:underline">
-                            ✕ Remove
-                        </button>
-                    </div>
-
-                    <div class="grid grid-cols-1 sm:grid-cols-4 gap-4 text-xs">
-
-                        <div>
-                            <label class="block font-bold text-slate-700 mb-1">PRINCIPAL NAME</label>
-                            <input type="text" name="principal_name[]" placeholder="e.g. Evergreen" class="w-full p-2.5 rounded-xl border border-slate-300">
-                        </div>
-
-                        <div>
-                            <label class="block font-bold text-slate-700 mb-1">VESSEL NAME *</label>
-                            <input type="text" name="vessel_name[]" required placeholder="e.g. M/V Star" class="w-full p-2.5 rounded-xl border border-slate-300">
-                        </div>
-
-                        <div>
-                            <label class="block font-bold text-slate-700 mb-1">FLAG</label>
-                            <input type="text" name="vessel_flag[]" placeholder="e.g. Panama" class="w-full p-2.5 rounded-xl border border-slate-300">
-                        </div>
-
-                        <div>
-                            <label class="block font-bold text-slate-700 mb-1">NATIONALITY</label>
-                            <input type="text" name="vessel_nat[]" placeholder="e.g. Japanese" class="w-full p-2.5 rounded-xl border border-slate-300">
-                        </div>
-
-                        <div>
-                            <label class="block font-bold text-slate-700 mb-1">MANNING AGENCY</label>
-                            <input type="text" name="manning_agency[]" placeholder="Agency" class="w-full p-2.5 rounded-xl border border-slate-300">
-                        </div>
-
-                        <div>
-                            <label class="block font-bold text-slate-700 mb-1">RANK</label>
-                            <input type="text" name="exp_rank[]" placeholder="Rank" class="w-full p-2.5 rounded-xl border border-slate-300">
-                        </div>
-
-                        <div>
-                            <label class="block font-bold text-slate-700 mb-1">VESSEL TYPE</label>
-                            <input type="text" name="vessel_type[]" placeholder="Vessel Type" class="w-full p-2.5 rounded-xl border border-slate-300">
-                        </div>
-
-                        <div>
-                            <label class="block font-bold text-slate-700 mb-1">GRT</label>
-                            <input type="text" name="vessel_grt[]" placeholder="GRT" class="w-full p-2.5 rounded-xl border border-slate-300">
-                        </div>
-
-                        <div>
-                            <label class="block font-bold text-slate-700 mb-1">KW/BHP</label>
-                            <input type="text" name="engine_power[]" placeholder="KW/BHP" class="w-full p-2.5 rounded-xl border border-slate-300">
-                        </div>
-
-                        <div>
-                            <label class="block font-bold text-slate-700 mb-1">SALARY (USD)</label>
-                            <input type="text" name="salary[]" placeholder="Salary" class="w-full p-2.5 rounded-xl border border-slate-300">
-                        </div>
-
-                        <div>
-                            <label class="block font-bold text-slate-700 mb-1">DATE FROM</label>
-                            <input type="date" name="date_from[]" class="w-full p-2.5 rounded-xl border border-slate-300">
-                        </div>
-
-                        <div>
-                            <label class="block font-bold text-slate-700 mb-1">DATE TO</label>
-                            <input type="date" name="date_to[]" class="w-full p-2.5 rounded-xl border border-slate-300">
-                        </div>
-
-                    </div>
-                        `;
-
-                        const removeBtn = div.querySelector('.remove-experience-btn');
-                        removeBtn.addEventListener('click', function() {
-                            if (confirm('Are you sure you want to remove this experience?')) {
-                                div.remove();
-                                renumberExperiences();
-                            }
-                        });
-
-                        container.appendChild(div);
-                    }
-
-                    function renumberExperiences() {
-                        const container = document.getElementById('experienceContainer');
-                        const cards = container.children;
-                        for (let i = 0; i < cards.length; i++) {
-                            const numberLabel = cards[i].querySelector('p');
-                            if (numberLabel && numberLabel.textContent.includes('EXPERIENCE #')) {
-                                numberLabel.innerHTML = `EXPERIENCE #${i + 1} <span class="text-red-600">*</span>`;
-                            }
-                        }
-                    }
+        function renumberExperiences() {
+            var cards = document.querySelectorAll('#experienceContainer > .experience-card');
+            cards.forEach(function(card, index) {
+                var title = card.querySelector('.exp-title');
+                if (title) { title.innerHTML = 'EXPERIENCE #' + (index + 1) + ' <span class="text-red-600 exp-required-mark">*</span>'; }
+            });
+        }
 
         // ============ REVIEW TABS ============
 
-        const reviewTabs = ['personal', 'documents', 'shipboard'];
-        let currentReviewTab = 'personal';
+        var reviewTabs = ['personal', 'documents', 'shipboard'];
+        var currentReviewTab = 'personal';
 
         function showReviewTab(tabName) {
             currentReviewTab = tabName;
-
-            reviewTabs.forEach(t => {
-                const btn = document.getElementById('reviewTabBtn-' + t);
-                const content = document.getElementById('reviewTabContent-' + t);
+            reviewTabs.forEach(function(t) {
+                var btn = document.getElementById('reviewTabBtn-' + t);
+                var content = document.getElementById('reviewTabContent-' + t);
                 if (t === tabName) {
                     btn.classList.add('bg-blue-600', 'text-white');
                     btn.classList.remove('bg-slate-200', 'text-slate-700', 'hover:bg-slate-300');
@@ -1258,10 +1440,9 @@ $todayDate = date('Y-m-d'); // used to cap date pickers so tomorrow/future dates
                     content.classList.add('hidden');
                 }
             });
-
-            const nextBtn = document.getElementById('reviewNextBtn');
+            var nextBtn = document.getElementById('reviewNextBtn');
             if (tabName === 'shipboard') {
-                nextBtn.textContent = 'SUBMIT APPLICATION NOW ✓';
+                nextBtn.textContent = 'SUBMIT APPLICATION NOW \u2713';
                 nextBtn.classList.remove('bg-slate-200', 'text-slate-800', 'hover:bg-slate-300');
                 nextBtn.classList.add('bg-emerald-600', 'text-white', 'hover:bg-emerald-700');
             } else {
@@ -1269,16 +1450,14 @@ $todayDate = date('Y-m-d'); // used to cap date pickers so tomorrow/future dates
                 nextBtn.classList.remove('bg-emerald-600', 'text-white', 'hover:bg-emerald-700');
                 nextBtn.classList.add('bg-slate-200', 'text-slate-800', 'hover:bg-slate-300');
             }
-
             window.scrollTo({ top: 0, behavior: 'smooth' });
         }
 
         function nextReviewTab() {
-            const idx = reviewTabs.indexOf(currentReviewTab);
+            var idx = reviewTabs.indexOf(currentReviewTab);
             if (idx < reviewTabs.length - 1) {
                 showReviewTab(reviewTabs[idx + 1]);
             } else {
-                // Final tab — ask for confirmation before submitting
                 openConfirmModal();
             }
         }
@@ -1292,33 +1471,40 @@ $todayDate = date('Y-m-d'); // used to cap date pickers so tomorrow/future dates
         }
 
         function confirmSubmitApplication() {
+            if (isSubmitting) return;
+            var submitBtn = document.querySelector('#confirmSubmitModal button.bg-emerald-600');
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.textContent = 'Submitting...';
+                submitBtn.classList.add('opacity-75', 'cursor-not-allowed');
+            }
+            isSubmitting = true;
             closeConfirmModal();
             document.getElementById('seafarerForm').requestSubmit();
         }
 
         function editCurrentReviewTab() {
-            goToStep(currentReviewTab);
+            if (currentReviewTab === 'personal') goToStep('personal');
+            else if (currentReviewTab === 'documents') goToStep('documents');
+            else if (currentReviewTab === 'shipboard') goToStep('shipboard');
         }
 
         // Builds one label/value block
         function reviewField(label, value) {
-            const hasValue = value && value.toString().trim() !== '';
-            return `
-                <div>
-                    <p class="text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1">${label}</p>
-                    <p class="text-sm ${hasValue ? 'font-semibold text-slate-800' : 'font-normal italic text-slate-400'}">${hasValue ? value : 'Not provided'}</p>
-                </div>
-            `;
+            var hasValue = value && value.toString().trim() !== '';
+            return '<div>' +
+                '<p class="text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1">' + label + '</p>' +
+                '<p class="text-sm ' + (hasValue ? 'font-semibold text-slate-800' : 'font-normal italic text-slate-400') + '">' + (hasValue ? value : 'Not provided') + '</p>' +
+                '</div>';
         }
 
         function reviewSectionHeader(title) {
-            return `<h3 class="font-black text-slate-900 text-xs sm:text-sm uppercase tracking-wider border-l-4 border-slate-900 pl-3 mb-3">${title}</h3>`;
+            return '<h3 class="font-black text-slate-900 text-xs sm:text-sm uppercase tracking-wider border-l-4 border-slate-900 pl-3 mb-3">' + title + '</h3>';
         }
 
         function populateReview() {
-            const form = document.getElementById('seafarerForm');
-            const formData = new FormData(form);
-
+            var form = document.getElementById('seafarerForm');
+            var formData = new FormData(form);
             populatePersonalReview(formData);
             populateDocumentsReview(formData);
             populateShipboardReview(formData);
@@ -1414,7 +1600,6 @@ $todayDate = date('Y-m-d'); // used to cap date pickers so tomorrow/future dates
 
             document.getElementById('reviewTabContent-personal').innerHTML = html;
         }
-
         function populateDocumentsReview(formData) {
             const trainingNames = formData.getAll('training_name[]');
             const trainingNos = formData.getAll('training_no[]');
@@ -1505,61 +1690,57 @@ $todayDate = date('Y-m-d'); // used to cap date pickers so tomorrow/future dates
 
             document.getElementById('reviewTabContent-documents').innerHTML = html;
         }
-
+        // === populateShipboardReview (NEW - with cadet mode support) ===
         function populateShipboardReview(formData) {
-            const principalNames = formData.getAll('principal_name[]');
-            const vesselNames = formData.getAll('vessel_name[]');
-            const vesselFlags = formData.getAll('vessel_flag[]');
-            const vesselNats = formData.getAll('vessel_nat[]');
-            const manningAgencies = formData.getAll('manning_agency[]');
-            const ranks = formData.getAll('exp_rank[]');
-            const vesselTypes = formData.getAll('vessel_type[]');
-            const grts = formData.getAll('vessel_grt[]');
-            const enginePowers = formData.getAll('engine_power[]');
-            const salaries = formData.getAll('salary[]');
-            const datesFrom = formData.getAll('date_from[]');
-            const datesTo = formData.getAll('date_to[]');
-
-            let experiencesHtml = '';
-            for (let i = 0; i < vesselNames.length; i++) {
-                experiencesHtml += `
-                    <div class="bg-slate-50 rounded-2xl border border-slate-200 p-5 mb-4">
-                        <p class="text-xs font-black text-blue-700 uppercase mb-3">Experience #${i + 1}</p>
-                        <div class="grid grid-cols-1 sm:grid-cols-4 gap-4">
-                            ${reviewField('Principal Name', principalNames[i])}
-                            ${reviewField('Vessel Name', vesselNames[i])}
-                            ${reviewField('Flag', vesselFlags[i])}
-                            ${reviewField('Nationality', vesselNats[i])}
-                            ${reviewField('Manning Agency', manningAgencies[i])}
-                            ${reviewField('Rank', ranks[i])}
-                            ${reviewField('Vessel Type', vesselTypes[i])}
-                            ${reviewField('GRT', grts[i])}
-                            ${reviewField('KW/BHP', enginePowers[i])}
-                            ${reviewField('Salary (USD)', salaries[i])}
-                            ${reviewField('Date From', datesFrom[i])}
-                            ${reviewField('Date To', datesTo[i])}
-                        </div>
-                    </div>
-                `;
+            var isCadet = formData.get('is_cadet') === '1';
+            var experiencesHtml = '';
+            if (isCadet) {
+                experiencesHtml = '<div class="bg-blue-50 border border-blue-200 rounded-2xl p-5 text-center text-blue-900">' +
+                    '<span class="text-2xl block mb-1">\u2693</span>' +
+                    '<p class="font-bold text-sm">First-Time Applicant / Cadet</p>' +
+                    '<p class="text-xs text-blue-700 mt-1">Applicant has indicated zero prior sea service.</p>' +
+                    '</div>';
+            } else {
+                var principalNames = formData.getAll('principal_name[]');
+                var vesselNames = formData.getAll('vessel_name[]');
+                var vesselFlags = formData.getAll('vessel_flag[]');
+                var vesselNats = formData.getAll('vessel_nat[]');
+                var manningAgencies = formData.getAll('manning_agency[]');
+                var ranks = formData.getAll('exp_rank[]');
+                var vesselTypes = formData.getAll('vessel_type[]');
+                var grts = formData.getAll('vessel_grt[]');
+                var enginePowers = formData.getAll('engine_power[]');
+                var salaries = formData.getAll('salary[]');
+                var datesFrom = formData.getAll('date_from[]');
+                var datesTo = formData.getAll('date_to[]');
+                var validCount = 0;
+                for (var i = 0; i < vesselNames.length; i++) {
+                    if (!vesselNames[i] || vesselNames[i].trim() === '') continue;
+                    validCount++;
+                    experiencesHtml += '<div class="bg-slate-50 rounded-2xl border border-slate-200 p-5 mb-4">' +
+                        '<p class="text-xs font-black text-blue-700 uppercase mb-3">Sea Service #' + validCount + '</p>' +
+                        '<div class="grid grid-cols-1 sm:grid-cols-4 gap-4">' +
+                        reviewField('Vessel Name', vesselNames[i]) +
+                        reviewField('Rank', ranks[i]) +
+                        reviewField('Principal Name', principalNames[i]) +
+                        reviewField('Manning Agency', manningAgencies[i]) +
+                        reviewField('Flag', vesselFlags[i]) +
+                        reviewField('Nationality', vesselNats[i]) +
+                        reviewField('Vessel Type', vesselTypes[i]) +
+                        reviewField('GRT', grts[i]) +
+                        reviewField('KW/BHP', enginePowers[i]) +
+                        reviewField('Salary (USD)', salaries[i]) +
+                        reviewField('Date From', datesFrom[i]) +
+                        reviewField('Date To', datesTo[i]) +
+                        '</div></div>';
+                }
+                if (validCount === 0) {
+                    experiencesHtml = '<p class="text-sm italic text-slate-400">No sea service records provided.</p>';
+                }
             }
-            if (experiencesHtml === '') {
-                experiencesHtml = `<p class="text-sm italic text-slate-400">No shipboard experience added.</p>`;
-            }
-
-            const html = `
-                <div>
-                    ${reviewSectionHeader('EXPERIENCES')}
-                    ${experiencesHtml}
-                </div>
-
-                <hr class="border-slate-200">
-
-                <div>
-                    ${reviewSectionHeader('ADDITIONAL DETAILS')}
-                    ${reviewField('Additional Details', formData.get('additional_details'))}
-                </div>
-            `;
-
+            var html = '<div>' + reviewSectionHeader('SEA SERVICE & SHIPBOARD EXPERIENCES') + experiencesHtml + '</div>' +
+                '<hr class="border-slate-200">' +
+                '<div>' + reviewSectionHeader('ADDITIONAL DETAILS') + reviewField('Additional Information', formData.get('additional_details')) + '</div>';
             document.getElementById('reviewTabContent-shipboard').innerHTML = html;
         }
     </script>
