@@ -654,8 +654,8 @@ $todayDate = date('Y-m-d');
                                     <tr class="bg-slate-100 text-slate-700 uppercase font-black">
                                         <th class="p-3 rounded-l-xl">DOCUMENT NAME</th>
                                         <th class="p-3">DOCUMENT NO. <span class="text-red-600">*</span></th>
-                                        <th class="p-3">ISSUE DATE</th>
-                                        <th class="p-3">EXPIRY DATE</th>
+                                        <th class="p-3">ISSUE DATE <span class="text-red-600">*</span></th>
+                                        <th class="p-3">EXPIRY DATE <span class="text-red-600">*</span></th>
                                         <th class="p-3 rounded-r-xl">PLACE ISSUED <span class="text-red-600">*</span></th>
                                     </tr>
                                 </thead>
@@ -664,8 +664,8 @@ $todayDate = date('Y-m-d');
                                     <tr>
                                         <td class="p-3 font-bold text-slate-900">PASSPORT</td>
                                         <td class="p-2"><input type="text" name="passport_no" required placeholder="Passport No." class="w-full p-2 border border-slate-300 rounded-lg"></td>
-                                        <td class="p-2"><input type="date" name="passport_issue" id="passportIssue" max="<?php echo $todayDate; ?>" class="w-full p-2 border border-slate-300 rounded-lg" onchange="validateDatePair(this, document.getElementById('passportExpiry'), 'Passport', document.getElementById('passportDateError'))"></td>
-                                        <td class="p-2"><input type="date" name="passport_expiry" id="passportExpiry" class="w-full p-2 border border-slate-300 rounded-lg" onchange="validateDatePair(document.getElementById('passportIssue'), this, 'Passport', document.getElementById('passportDateError'))"></td>
+                                        <td class="p-2"><input type="date" name="passport_issue" id="passportIssue" required max="<?php echo $todayDate; ?>" class="w-full p-2 border border-slate-300 rounded-lg" onchange="validateDatePair(this, document.getElementById('passportExpiry'), 'Passport', document.getElementById('passportDateError'))"></td>
+                                        <td class="p-2"><input type="date" name="passport_expiry" id="passportExpiry" required class="w-full p-2 border border-slate-300 rounded-lg" onchange="validateDatePair(document.getElementById('passportIssue'), this, 'Passport', document.getElementById('passportDateError'))"></td>
                                         <td class="p-2"><input type="text" name="passport_place" required placeholder="Place Issued" class="w-full p-2 border border-slate-300 rounded-lg"></td>
                                     </tr>
                                     <tr><td colspan="5" class="px-3 py-0"><p id="passportDateError" class="text-red-600 text-xs font-semibold hidden"></p></td></tr>
@@ -673,18 +673,18 @@ $todayDate = date('Y-m-d');
                                     <tr>
                                         <td class="p-3 font-bold text-slate-900">SEAMAN'S BOOK</td>
                                         <td class="p-2"><input type="text" name="sirb_no" required placeholder="SIRB / SID No." class="w-full p-2 border border-slate-300 rounded-lg"></td>
-                                        <td class="p-2"><input type="date" name="sirb_issue" id="sirbIssue" max="<?php echo $todayDate; ?>" class="w-full p-2 border border-slate-300 rounded-lg" onchange="validateDatePair(this, document.getElementById('sirbExpiry'), 'Seaman\'s Book', document.getElementById('sirbDateError'))"></td>
-                                        <td class="p-2"><input type="date" name="sirb_expiry" id="sirbExpiry" class="w-full p-2 border border-slate-300 rounded-lg" onchange="validateDatePair(document.getElementById('sirbIssue'), this, 'Seaman\'s Book', document.getElementById('sirbDateError'))"></td>
+                                        <td class="p-2"><input type="date" name="sirb_issue" id="sirbIssue" required max="<?php echo $todayDate; ?>" class="w-full p-2 border border-slate-300 rounded-lg" onchange="validateDatePair(this, document.getElementById('sirbExpiry'), 'Seaman\'s Book', document.getElementById('sirbDateError'))"></td>
+                                        <td class="p-2"><input type="date" name="sirb_expiry" id="sirbExpiry" required class="w-full p-2 border border-slate-300 rounded-lg" onchange="validateDatePair(document.getElementById('sirbIssue'), this, 'Seaman\'s Book', document.getElementById('sirbDateError'))"></td>
                                         <td class="p-2"><input type="text" name="sirb_place" required placeholder="Place Issued" class="w-full p-2 border border-slate-300 rounded-lg"></td>
                                     </tr>
                                     <tr><td colspan="5" class="px-3 py-0"><p id="sirbDateError" class="text-red-600 text-xs font-semibold hidden"></p></td></tr>
                                     <!-- GOC License -->
                                     <tr>
                                         <td class="p-3 font-bold text-slate-900">GOC LICENSE</td>
-                                        <td class="p-2"><input type="text" name="goc_no" placeholder="GOC License No." class="w-full p-2 border border-slate-300 rounded-lg"></td>
-                                        <td class="p-2"><input type="date" name="goc_issue" id="gocIssue" max="<?php echo $todayDate; ?>" class="w-full p-2 border border-slate-300 rounded-lg" onchange="validateDatePair(this, document.getElementById('gocExpiry'), 'GOC License', document.getElementById('gocDateError'))"></td>
-                                        <td class="p-2"><input type="date" name="goc_expiry" id="gocExpiry" class="w-full p-2 border border-slate-300 rounded-lg" onchange="validateDatePair(document.getElementById('gocIssue'), this, 'GOC License', document.getElementById('gocDateError'))"></td>
-                                        <td class="p-2"><input type="text" name="goc_place" placeholder="Place Issued" class="w-full p-2 border border-slate-300 rounded-lg"></td>
+                                        <td class="p-2"><input type="text" name="goc_no" placeholder="GOC License No." class="w-full p-2 border border-slate-300 rounded-lg" oninput="checkGocCompleteness()" onchange="checkGocCompleteness()"></td>
+                                        <td class="p-2"><input type="date" name="goc_issue" id="gocIssue" max="<?php echo $todayDate; ?>" class="w-full p-2 border border-slate-300 rounded-lg" oninput="checkGocCompleteness()" onchange="checkGocCompleteness()"></td>
+                                        <td class="p-2"><input type="date" name="goc_expiry" id="gocExpiry" class="w-full p-2 border border-slate-300 rounded-lg" oninput="checkGocCompleteness()" onchange="checkGocCompleteness()"></td>
+                                        <td class="p-2"><input type="text" name="goc_place" placeholder="Place Issued" class="w-full p-2 border border-slate-300 rounded-lg" oninput="checkGocCompleteness()" onchange="checkGocCompleteness()"></td>
                                     </tr>
                                     <tr><td colspan="5" class="px-3 py-0"><p id="gocDateError" class="text-red-600 text-xs font-semibold hidden"></p></td></tr>
                                 </tbody>
@@ -700,7 +700,7 @@ $todayDate = date('Y-m-d');
                         <div class="grid grid-cols-1 sm:grid-cols-4 gap-4">
                             <div>
                                 <label class="block text-xs font-bold text-slate-700 uppercase mb-1">LICENSE TYPE</label>
-                                <select name="coc_type" class="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white text-xs">
+                                <select name="coc_type" onchange="checkCocCompleteness()" class="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white text-xs">
                                     <option value="">Choose...</option>
                                     <option value="Master Mariner">Master Mariner</option>
                                     <option value="Chief Mate">Chief Mate</option>
@@ -713,15 +713,15 @@ $todayDate = date('Y-m-d');
                             </div>
                             <div>
                                 <label class="block text-xs font-bold text-slate-700 uppercase mb-1">NO.</label>
-                                <input type="text" name="coc_no" placeholder="COC / License No." class="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs">
+                                <input type="text" name="coc_no" placeholder="COC / License No." oninput="checkCocCompleteness()" onchange="checkCocCompleteness()" class="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs">
                             </div>
                             <div>
                                 <label class="block text-xs font-bold text-slate-700 uppercase mb-1">ISSUE DATE</label>
-                                <input type="date" name="coc_issue" id="cocIssue" max="<?php echo $todayDate; ?>" class="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs" onchange="validateDatePair(this, document.getElementById('cocExpiry'), 'COC / License', document.getElementById('cocDateError'))">
+                                <input type="date" name="coc_issue" id="cocIssue" max="<?php echo $todayDate; ?>" oninput="checkCocCompleteness()" onchange="checkCocCompleteness()" class="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs">
                             </div>
                             <div>
                                 <label class="block text-xs font-bold text-slate-700 uppercase mb-1">EXPIRY DATE</label>
-                                <input type="date" name="coc_expiry" id="cocExpiry" class="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs" onchange="validateDatePair(document.getElementById('cocIssue'), this, 'COC / License', document.getElementById('cocDateError'))">
+                                <input type="date" name="coc_expiry" id="cocExpiry" oninput="checkCocCompleteness()" onchange="checkCocCompleteness()" class="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs">
                             </div>
                         </div>
                         <p id="cocDateError" class="text-red-600 text-xs font-semibold mt-2 hidden"></p>
@@ -753,10 +753,10 @@ $todayDate = date('Y-m-d');
                         </div>
                         <div id="trainingContainer" class="space-y-3">
                             <div class="training-row grid grid-cols-1 sm:grid-cols-4 gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200">
-                                <input type="text" name="training_name[]" placeholder="Certificate Name (e.g. BST, ECDIS)" class="px-3 py-2 rounded-lg border border-slate-300 text-xs">
-                                <input type="text" name="training_no[]" placeholder="Certificate No." class="px-3 py-2 rounded-lg border border-slate-300 text-xs">
-                                <input type="date" name="training_issue[]" max="<?php echo $todayDate; ?>" class="px-3 py-2 rounded-lg border border-slate-300 text-xs training-issue" onchange="validateTrainingDates(this)">
-                                <input type="date" name="training_expiry[]" class="px-3 py-2 rounded-lg border border-slate-300 text-xs training-expiry" onchange="validateTrainingDates(this)">
+                                <input type="text" name="training_name[]" placeholder="Certificate Name (e.g. BST, ECDIS)" oninput="validateTrainingDates(this)" onchange="validateTrainingDates(this)" class="px-3 py-2 rounded-lg border border-slate-300 text-xs">
+                                <input type="text" name="training_no[]" placeholder="Certificate No." oninput="validateTrainingDates(this)" onchange="validateTrainingDates(this)" class="px-3 py-2 rounded-lg border border-slate-300 text-xs">
+                                <input type="date" name="training_issue[]" max="<?php echo $todayDate; ?>" class="px-3 py-2 rounded-lg border border-slate-300 text-xs training-issue" oninput="validateTrainingDates(this)" onchange="validateTrainingDates(this)">
+                                <input type="date" name="training_expiry[]" class="px-3 py-2 rounded-lg border border-slate-300 text-xs training-expiry" oninput="validateTrainingDates(this)" onchange="validateTrainingDates(this)">
                             </div>
                             <p class="training-date-error text-red-600 text-xs font-semibold hidden"></p>
                         </div>
@@ -1031,7 +1031,6 @@ $todayDate = date('Y-m-d');
         © <?php echo date('Y'); ?> Crystal Shipping Inc. All Rights Reserved. | Seafarer IEAC Application Portal
     </footer>
 
-    <!-- JavaScript Navigation & Dynamics -->
     <!-- JavaScript Navigation & Dynamics -->
     <script>
         function toggleTermsBtn() {
@@ -1375,59 +1374,230 @@ $todayDate = date('Y-m-d');
             return true;
         }
 
-        function validateTrainingDates(changedInput) {
-            var row = changedInput.closest('.training-row');
-            if (!row) return;
-            var issueInput = row.querySelector('.training-issue');
-            var expiryInput = row.querySelector('.training-expiry');
-            var errorEl = null;
-            var parent = row.parentElement;
-            if (parent) {
-                errorEl = parent.querySelector('.training-date-error');
-                if (!errorEl) errorEl = row.nextElementSibling;
-                if (errorEl && !errorEl.classList.contains('training-date-error')) errorEl = null;
+        function checkGocCompleteness() {
+            var gocNo = document.querySelector('input[name="goc_no"]');
+            var gocIssue = document.getElementById('gocIssue');
+            var gocExpiry = document.getElementById('gocExpiry');
+            var gocPlace = document.querySelector('input[name="goc_place"]');
+            var gocErr = document.getElementById('gocDateError');
+            if (!gocNo || !gocIssue || !gocExpiry || !gocPlace) return true;
+
+            var noVal = gocNo.value.trim();
+            var issueVal = gocIssue.value;
+            var expiryVal = gocExpiry.value;
+            var placeVal = gocPlace.value.trim();
+
+            var hasAny = (noVal !== '' || issueVal !== '' || expiryVal !== '' || placeVal !== '');
+
+            if (hasAny) {
+                var missing = [];
+                if (!noVal) { missing.push('Document No.'); gocNo.classList.add('border-red-500', 'bg-red-50'); }
+                else { gocNo.classList.remove('border-red-500', 'bg-red-50'); }
+
+                if (!issueVal) { missing.push('Issue Date'); gocIssue.classList.add('border-red-500', 'bg-red-50'); }
+                else { gocIssue.classList.remove('border-red-500', 'bg-red-50'); }
+
+                if (!expiryVal) { missing.push('Expiry Date'); gocExpiry.classList.add('border-red-500', 'bg-red-50'); }
+                else { gocExpiry.classList.remove('border-red-500', 'bg-red-50'); }
+
+                if (!placeVal) { missing.push('Place Issued'); gocPlace.classList.add('border-red-500', 'bg-red-50'); }
+                else { gocPlace.classList.remove('border-red-500', 'bg-red-50'); }
+
+                if (missing.length > 0) {
+                    if (gocErr) {
+                        gocErr.textContent = '\u26A0 GOC License: Please complete all fields (' + missing.join(', ') + ').';
+                        gocErr.classList.remove('hidden');
+                    }
+                    return false;
+                } else {
+                    return validateDatePair(gocIssue, gocExpiry, 'GOC License', gocErr);
+                }
+            } else {
+                if (gocErr) { gocErr.classList.add('hidden'); gocErr.textContent = ''; }
+                [gocNo, gocIssue, gocExpiry, gocPlace].forEach(function(el) {
+                    el.classList.remove('border-red-500', 'bg-red-50');
+                    el.setCustomValidity('');
+                });
+                return true;
             }
-            var certName = row.querySelector('input[name="training_name[]"]');
-            var label = (certName && certName.value.trim()) ? certName.value.trim() : 'Training Certificate';
-            validateDatePair(issueInput, expiryInput, label, errorEl);
+        }
+
+        function checkCocCompleteness() {
+            var cocType = document.querySelector('select[name="coc_type"]');
+            var cocNo = document.querySelector('input[name="coc_no"]');
+            var cocIssue = document.getElementById('cocIssue');
+            var cocExpiry = document.getElementById('cocExpiry');
+            var cocErr = document.getElementById('cocDateError');
+            if (!cocType || !cocNo || !cocIssue || !cocExpiry) return true;
+
+            var typeVal = cocType.value.trim();
+            var noVal = cocNo.value.trim();
+            var issueVal = cocIssue.value;
+            var expiryVal = cocExpiry.value;
+
+            var hasAny = (typeVal !== '' || noVal !== '' || issueVal !== '' || expiryVal !== '');
+
+            if (hasAny) {
+                var missing = [];
+                if (!typeVal) { missing.push('License Type'); cocType.classList.add('border-red-500', 'bg-red-50'); }
+                else { cocType.classList.remove('border-red-500', 'bg-red-50'); }
+
+                if (!noVal) { missing.push('License No.'); cocNo.classList.add('border-red-500', 'bg-red-50'); }
+                else { cocNo.classList.remove('border-red-500', 'bg-red-50'); }
+
+                if (!issueVal) { missing.push('Issue Date'); cocIssue.classList.add('border-red-500', 'bg-red-50'); }
+                else { cocIssue.classList.remove('border-red-500', 'bg-red-50'); }
+
+                if (!expiryVal) { missing.push('Expiry Date'); cocExpiry.classList.add('border-red-500', 'bg-red-50'); }
+                else { cocExpiry.classList.remove('border-red-500', 'bg-red-50'); }
+
+                if (missing.length > 0) {
+                    if (cocErr) {
+                        cocErr.textContent = '\u26A0 COC / License: Please complete all fields (' + missing.join(', ') + ').';
+                        cocErr.classList.remove('hidden');
+                    }
+                    return false;
+                } else {
+                    return validateDatePair(cocIssue, cocExpiry, 'COC / License', cocErr);
+                }
+            } else {
+                if (cocErr) { cocErr.classList.add('hidden'); cocErr.textContent = ''; }
+                [cocType, cocNo, cocIssue, cocExpiry].forEach(function(el) {
+                    el.classList.remove('border-red-500', 'bg-red-50');
+                    el.setCustomValidity('');
+                });
+                return true;
+            }
+        }
+
+        function validateTrainingDates(changedInput) {
+            var row = changedInput ? changedInput.closest('.training-row') : null;
+            if (!row) return true;
+
+            var tName = row.querySelector('input[name="training_name[]"]');
+            var tNo = row.querySelector('input[name="training_no[]"]');
+            var tIssue = row.querySelector('.training-issue');
+            var tExpiry = row.querySelector('.training-expiry');
+            var tErr = null;
+            var tParent = row.parentElement;
+            if (tParent) tErr = tParent.querySelector('.training-date-error');
+            if (!tErr) tErr = row.nextElementSibling;
+            if (tErr && !tErr.classList.contains('training-date-error')) tErr = null;
+
+            var nameVal = tName ? tName.value.trim() : '';
+            var noVal = tNo ? tNo.value.trim() : '';
+            var issueVal = tIssue ? tIssue.value : '';
+            var expiryVal = tExpiry ? tExpiry.value : '';
+
+            var hasAny = (nameVal !== '' || noVal !== '' || issueVal !== '' || expiryVal !== '');
+
+            if (hasAny) {
+                var missing = [];
+                if (!nameVal) { missing.push('Certificate Name'); if (tName) tName.classList.add('border-red-500', 'bg-red-50'); }
+                else if (tName) { tName.classList.remove('border-red-500', 'bg-red-50'); }
+
+                if (!noVal) { missing.push('Certificate No.'); if (tNo) tNo.classList.add('border-red-500', 'bg-red-50'); }
+                else if (tNo) { tNo.classList.remove('border-red-500', 'bg-red-50'); }
+
+                if (!issueVal) { missing.push('Issue Date'); if (tIssue) tIssue.classList.add('border-red-500', 'bg-red-50'); }
+                else if (tIssue) { tIssue.classList.remove('border-red-500', 'bg-red-50'); }
+
+                if (!expiryVal) { missing.push('Expiry Date'); if (tExpiry) tExpiry.classList.add('border-red-500', 'bg-red-50'); }
+                else if (tExpiry) { tExpiry.classList.remove('border-red-500', 'bg-red-50'); }
+
+                var rowLabel = nameVal ? nameVal : 'Training Certificate';
+                if (missing.length > 0) {
+                    if (tErr) {
+                        tErr.textContent = '\u26A0 ' + rowLabel + ': Please complete all fields (' + missing.join(', ') + ').';
+                        tErr.classList.remove('hidden');
+                    }
+                    return false;
+                } else {
+                    return validateDatePair(tIssue, tExpiry, rowLabel, tErr);
+                }
+            } else {
+                if (tErr) { tErr.classList.add('hidden'); tErr.textContent = ''; }
+                [tName, tNo, tIssue, tExpiry].forEach(function(el) {
+                    if (el) { el.classList.remove('border-red-500', 'bg-red-50'); el.setCustomValidity(''); }
+                });
+                return true;
+            }
         }
 
         function validateAllDocumentDates() {
             var allValid = true;
-            var docPairs = [
-                { issue: 'passportIssue', expiry: 'passportExpiry', label: 'Passport', error: 'passportDateError' },
-                { issue: 'sirbIssue', expiry: 'sirbExpiry', label: "Seaman's Book", error: 'sirbDateError' },
-                { issue: 'gocIssue', expiry: 'gocExpiry', label: 'GOC License', error: 'gocDateError' },
-                { issue: 'cocIssue', expiry: 'cocExpiry', label: 'COC / License', error: 'cocDateError' }
-            ];
-            for (var p = 0; p < docPairs.length; p++) {
-                var pair = docPairs[p];
-                var issueEl = document.getElementById(pair.issue);
-                var expiryEl = document.getElementById(pair.expiry);
-                var errorEl = document.getElementById(pair.error);
-                if ((issueEl && issueEl.value) || (expiryEl && expiryEl.value)) {
-                    if (!validateDatePair(issueEl, expiryEl, pair.label, errorEl)) {
-                        if (allValid) { (issueEl || expiryEl).scrollIntoView({ behavior: 'smooth', block: 'center' }); }
-                        allValid = false;
-                    }
+
+            // 1. Mandatory Passport
+            var pIssue = document.getElementById('passportIssue');
+            var pExpiry = document.getElementById('passportExpiry');
+            var pErr = document.getElementById('passportDateError');
+            if (!pIssue || !pIssue.value || !pExpiry || !pExpiry.value) {
+                if (pErr) {
+                    pErr.textContent = '\u26A0 Passport: Both Issue Date and Expiry Date are required.';
+                    pErr.classList.remove('hidden');
+                }
+                if (pIssue && !pIssue.value) pIssue.classList.add('border-red-500', 'bg-red-50');
+                if (pExpiry && !pExpiry.value) pExpiry.classList.add('border-red-500', 'bg-red-50');
+                if (allValid) { (pIssue || pExpiry).scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+                allValid = false;
+            } else {
+                if (!validateDatePair(pIssue, pExpiry, 'Passport', pErr)) {
+                    if (allValid) { (pIssue || pExpiry).scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+                    allValid = false;
                 }
             }
+
+            // 2. Mandatory Seaman's Book
+            var sIssue = document.getElementById('sirbIssue');
+            var sExpiry = document.getElementById('sirbExpiry');
+            var sErr = document.getElementById('sirbDateError');
+            if (!sIssue || !sIssue.value || !sExpiry || !sExpiry.value) {
+                if (sErr) {
+                    sErr.textContent = '\u26A0 Seaman\'s Book: Both Issue Date and Expiry Date are required.';
+                    sErr.classList.remove('hidden');
+                }
+                if (sIssue && !sIssue.value) sIssue.classList.add('border-red-500', 'bg-red-50');
+                if (sExpiry && !sExpiry.value) sExpiry.classList.add('border-red-500', 'bg-red-50');
+                if (allValid) { (sIssue || sExpiry).scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+                allValid = false;
+            } else {
+                if (!validateDatePair(sIssue, sExpiry, 'Seaman\'s Book', sErr)) {
+                    if (allValid) { (sIssue || sExpiry).scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+                    allValid = false;
+                }
+            }
+
+            // 3. Conditionally Mandatory GOC License
+            if (!checkGocCompleteness()) {
+                if (allValid) {
+                    var gocEl = document.getElementById('gocIssue') || document.querySelector('input[name="goc_no"]');
+                    if (gocEl) gocEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+                allValid = false;
+            }
+
+            // 4. Conditionally Mandatory COC / License
+            if (!checkCocCompleteness()) {
+                if (allValid) {
+                    var cocEl = document.getElementById('cocIssue') || document.querySelector('input[name="coc_no"]');
+                    if (cocEl) cocEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+                allValid = false;
+            }
+
+            // 5. Conditionally Mandatory Training Certificates (each row)
             var trainingRows = document.querySelectorAll('.training-row');
             trainingRows.forEach(function(row) {
-                var tIssue = row.querySelector('.training-issue');
-                var tExpiry = row.querySelector('.training-expiry');
-                if ((tIssue && tIssue.value) || (tExpiry && tExpiry.value)) {
-                    var cName = row.querySelector('input[name="training_name[]"]');
-                    var lbl = (cName && cName.value.trim()) ? cName.value.trim() : 'Training Certificate';
-                    var tErr = null;
-                    var tParent = row.parentElement;
-                    if (tParent) tErr = tParent.querySelector('.training-date-error');
-                    if (!validateDatePair(tIssue, tExpiry, lbl, tErr)) {
-                        if (allValid) { tIssue.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
-                        allValid = false;
+                var firstInp = row.querySelector('input');
+                if (!validateTrainingDates(firstInp)) {
+                    if (allValid) {
+                        var tIssue = row.querySelector('.training-issue') || firstInp;
+                        if (tIssue) tIssue.scrollIntoView({ behavior: 'smooth', block: 'center' });
                     }
+                    allValid = false;
                 }
             });
+
             return allValid;
         }
 
@@ -1543,10 +1713,10 @@ $todayDate = date('Y-m-d');
             wrapper.className = 'training-row-wrapper';
             var div = document.createElement('div');
             div.className = 'training-row relative grid grid-cols-1 sm:grid-cols-4 gap-3 bg-slate-50 p-3 pt-7 rounded-xl border border-slate-200';
-            div.innerHTML = '<input type="text" name="training_name[]" placeholder="Certificate Name" class="px-3 py-2 rounded-lg border border-slate-300 text-xs">' +
-                '<input type="text" name="training_no[]" placeholder="Certificate No." class="px-3 py-2 rounded-lg border border-slate-300 text-xs">' +
-                '<input type="date" name="training_issue[]" class="px-3 py-2 rounded-lg border border-slate-300 text-xs training-issue" onchange="validateTrainingDates(this)">' +
-                '<input type="date" name="training_expiry[]" class="px-3 py-2 rounded-lg border border-slate-300 text-xs training-expiry" onchange="validateTrainingDates(this)">';
+            div.innerHTML = '<input type="text" name="training_name[]" placeholder="Certificate Name" oninput="validateTrainingDates(this)" onchange="validateTrainingDates(this)" class="px-3 py-2 rounded-lg border border-slate-300 text-xs">' +
+                '<input type="text" name="training_no[]" placeholder="Certificate No." oninput="validateTrainingDates(this)" onchange="validateTrainingDates(this)" class="px-3 py-2 rounded-lg border border-slate-300 text-xs">' +
+                '<input type="date" name="training_issue[]" class="px-3 py-2 rounded-lg border border-slate-300 text-xs training-issue" oninput="validateTrainingDates(this)" onchange="validateTrainingDates(this)">' +
+                '<input type="date" name="training_expiry[]" class="px-3 py-2 rounded-lg border border-slate-300 text-xs training-expiry" oninput="validateTrainingDates(this)" onchange="validateTrainingDates(this)">';
             var errorP = document.createElement('p');
             errorP.className = 'training-date-error text-red-600 text-xs font-semibold hidden';
             var removeBtn = document.createElement('button');
@@ -1842,6 +2012,18 @@ $todayDate = date('Y-m-d');
                 trainingHtml = `<p class="text-sm italic text-slate-400">No training certificates added.</p>`;
             }
 
+            const gocNo = (formData.get('goc_no') || '').trim();
+            const gocIssue = (formData.get('goc_issue') || '').trim();
+            const gocExpiry = (formData.get('goc_expiry') || '').trim();
+            const gocPlace = (formData.get('goc_place') || '').trim();
+            const hasGoc = (gocNo !== '' || gocIssue !== '' || gocExpiry !== '' || gocPlace !== '');
+
+            const cocType = (formData.get('coc_type') || '').trim();
+            const cocNo = (formData.get('coc_no') || '').trim();
+            const cocIssue = (formData.get('coc_issue') || '').trim();
+            const cocExpiry = (formData.get('coc_expiry') || '').trim();
+            const hasCoc = (cocType !== '' || cocNo !== '' || cocIssue !== '' || cocExpiry !== '');
+
             const html = `
                 <div>
                     ${reviewSectionHeader('PRIMARY DOCUMENTS')}
@@ -1862,17 +2044,16 @@ $todayDate = date('Y-m-d');
                         </div>
                         <div class="grid grid-cols-1 sm:grid-cols-4 gap-4 bg-slate-50 rounded-xl border border-slate-200 p-4">
                             <p class="sm:col-span-4 text-xs font-black text-blue-700 uppercase">GOC License</p>
-                            ${reviewField('Document No.', formData.get('goc_no'))}
-                            ${reviewField('Issue Date', formData.get('goc_issue'))}
-                            ${reviewField('Expiry Date', formData.get('goc_expiry'))}
-                            ${reviewField('Place Issued', formData.get('goc_place'))}
+                            ${hasGoc ? `
+                                ${reviewField('Document No.', gocNo)}
+                                ${reviewField('Issue Date', gocIssue)}
+                                ${reviewField('Expiry Date', gocExpiry)}
+                                ${reviewField('Place Issued', gocPlace)}
+                            ` : `<p class="sm:col-span-4 text-xs italic text-slate-400">No GOC License provided (Not applicable).</p>`}
                         </div>
-                        <div class="grid grid-cols-1 sm:grid-cols-4 gap-4 bg-slate-50 rounded-xl border border-slate-200 p-4">
-                            <p class="sm:col-span-4 text-xs font-black text-blue-700 uppercase">SID</p>
-                            ${reviewField('Document No.', formData.get('sid_no'))}
-                            ${reviewField('Issue Date', formData.get('sid_issue'))}
-                            ${reviewField('Expiry Date', formData.get('sid_expiry'))}
-                            ${reviewField('Place Issued', formData.get('sid_place'))}
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-50 rounded-xl border border-slate-200 p-4">
+                            <p class="sm:col-span-2 text-xs font-black text-blue-700 uppercase">Seafarer's Identity Document (SID)</p>
+                            ${reviewField('SID Number', formData.get('sid_no'))}
                         </div>
                     </div>
                 </div>
@@ -1881,11 +2062,13 @@ $todayDate = date('Y-m-d');
 
                 <div>
                     ${reviewSectionHeader('COC / LICENSE')}
-                    <div class="grid grid-cols-1 sm:grid-cols-4 gap-4">
-                        ${reviewField('License Type', formData.get('coc_type'))}
-                        ${reviewField('No.', formData.get('coc_no'))}
-                        ${reviewField('Issue Date', formData.get('coc_issue'))}
-                        ${reviewField('Expiry Date', formData.get('coc_expiry'))}
+                    <div class="grid grid-cols-1 sm:grid-cols-4 gap-4 bg-slate-50 rounded-xl border border-slate-200 p-4">
+                        ${hasCoc ? `
+                            ${reviewField('License Type', cocType)}
+                            ${reviewField('No.', cocNo)}
+                            ${reviewField('Issue Date', cocIssue)}
+                            ${reviewField('Expiry Date', cocExpiry)}
+                        ` : `<p class="sm:col-span-4 text-xs italic text-slate-400">No COC / License provided (Not applicable).</p>`}
                     </div>
                 </div>
 
