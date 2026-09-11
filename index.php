@@ -1476,16 +1476,24 @@ $todayDate = date('Y-m-d');
             today.setHours(0, 0, 0, 0);
             [issueInput, expiryInput].forEach(function(inp) {
                 if (!inp) return;
-                inp.classList.remove('border-red-500', 'bg-red-50', 'border-amber-500');
+                inp.classList.remove('border-red-500', 'bg-red-50', 'border-amber-500', 'bg-amber-50');
                 inp.setCustomValidity('');
             });
-            if (errorEl) { errorEl.classList.add('hidden'); errorEl.textContent = ''; }
+            if (errorEl) {
+                errorEl.classList.add('hidden');
+                errorEl.classList.remove('text-amber-600', 'text-red-600');
+                errorEl.textContent = '';
+            }
             if (issueVal) {
                 var issueDate = new Date(issueVal);
                 if (issueDate > today) {
                     var msg = docLabel + ': Issue date cannot be in the future.';
                     if (issueInput) { issueInput.classList.add('border-red-500', 'bg-red-50'); issueInput.setCustomValidity(msg); }
-                    if (errorEl) { errorEl.textContent = '\u26A0 ' + msg; errorEl.classList.remove('hidden'); }
+                    if (errorEl) {
+                        errorEl.classList.add('text-red-600');
+                        errorEl.textContent = '\u26A0 ' + msg;
+                        errorEl.classList.remove('hidden');
+                    }
                     return false;
                 }
             }
@@ -1495,13 +1503,24 @@ $todayDate = date('Y-m-d');
                 if (expiryDate <= issueDateC) {
                     var msg2 = docLabel + ': Expiry date must be later than the issue date.';
                     if (expiryInput) { expiryInput.classList.add('border-red-500', 'bg-red-50'); expiryInput.setCustomValidity(msg2); }
-                    if (errorEl) { errorEl.textContent = '\u26A0 ' + msg2; errorEl.classList.remove('hidden'); }
+                    if (errorEl) {
+                        errorEl.classList.add('text-red-600');
+                        errorEl.textContent = '\u26A0 ' + msg2;
+                        errorEl.classList.remove('hidden');
+                    }
                     return false;
                 }
             }
             if (expiryVal) {
                 var expiryDateW = new Date(expiryVal);
-                if (expiryDateW < today && expiryInput) { expiryInput.classList.add('border-amber-500'); }
+                if (expiryDateW < today) {
+                    if (expiryInput) { expiryInput.classList.add('border-amber-500', 'bg-amber-50'); }
+                    if (errorEl) {
+                        errorEl.classList.add('text-amber-600');
+                        errorEl.textContent = '\u26A0 ' + docLabel + ': Document is expired. You may proceed; renewal will be required prior to deployment.';
+                        errorEl.classList.remove('hidden');
+                    }
+                }
             }
             return true;
         }
@@ -1537,6 +1556,8 @@ $todayDate = date('Y-m-d');
 
                 if (missing.length > 0) {
                     if (pErr) {
+                        pErr.classList.remove('text-amber-600');
+                        pErr.classList.add('text-red-600');
                         pErr.textContent = '\u26A0 Passport: Please complete all fields (' + missing.join(', ') + ').';
                         pErr.classList.remove('hidden');
                     }
@@ -1545,9 +1566,13 @@ $todayDate = date('Y-m-d');
                     return validateDatePair(pIssue, pExpiry, 'Passport', pErr);
                 }
             } else {
-                if (pErr) { pErr.classList.add('hidden'); pErr.textContent = ''; }
+                if (pErr) {
+                    pErr.classList.add('hidden');
+                    pErr.classList.remove('text-amber-600', 'text-red-600');
+                    pErr.textContent = '';
+                }
                 [pNo, pIssue, pExpiry, pPlace].forEach(function(el) {
-                    el.classList.remove('border-red-500', 'bg-red-50');
+                    el.classList.remove('border-red-500', 'bg-red-50', 'border-amber-500', 'bg-amber-50');
                     el.setCustomValidity('');
                 });
                 return true;
@@ -1585,6 +1610,8 @@ $todayDate = date('Y-m-d');
 
                 if (missing.length > 0) {
                     if (sErr) {
+                        sErr.classList.remove('text-amber-600');
+                        sErr.classList.add('text-red-600');
                         sErr.textContent = '\u26A0 Seaman\'s Book: Please complete all fields (' + missing.join(', ') + ').';
                         sErr.classList.remove('hidden');
                     }
@@ -1593,9 +1620,13 @@ $todayDate = date('Y-m-d');
                     return validateDatePair(sIssue, sExpiry, 'Seaman\'s Book', sErr);
                 }
             } else {
-                if (sErr) { sErr.classList.add('hidden'); sErr.textContent = ''; }
+                if (sErr) {
+                    sErr.classList.add('hidden');
+                    sErr.classList.remove('text-amber-600', 'text-red-600');
+                    sErr.textContent = '';
+                }
                 [sNo, sIssue, sExpiry, sPlace].forEach(function(el) {
-                    el.classList.remove('border-red-500', 'bg-red-50');
+                    el.classList.remove('border-red-500', 'bg-red-50', 'border-amber-500', 'bg-amber-50');
                     el.setCustomValidity('');
                 });
                 return true;
@@ -1633,6 +1664,8 @@ $todayDate = date('Y-m-d');
 
                 if (missing.length > 0) {
                     if (gocErr) {
+                        gocErr.classList.remove('text-amber-600');
+                        gocErr.classList.add('text-red-600');
                         gocErr.textContent = '\u26A0 GOC License: Please complete all fields (' + missing.join(', ') + ').';
                         gocErr.classList.remove('hidden');
                     }
@@ -1641,9 +1674,13 @@ $todayDate = date('Y-m-d');
                     return validateDatePair(gocIssue, gocExpiry, 'GOC License', gocErr);
                 }
             } else {
-                if (gocErr) { gocErr.classList.add('hidden'); gocErr.textContent = ''; }
+                if (gocErr) {
+                    gocErr.classList.add('hidden');
+                    gocErr.classList.remove('text-amber-600', 'text-red-600');
+                    gocErr.textContent = '';
+                }
                 [gocNo, gocIssue, gocExpiry, gocPlace].forEach(function(el) {
-                    el.classList.remove('border-red-500', 'bg-red-50');
+                    el.classList.remove('border-red-500', 'bg-red-50', 'border-amber-500', 'bg-amber-50');
                     el.setCustomValidity('');
                 });
                 return true;
@@ -1681,6 +1718,8 @@ $todayDate = date('Y-m-d');
 
                 if (missing.length > 0) {
                     if (cocErr) {
+                        cocErr.classList.remove('text-amber-600');
+                        cocErr.classList.add('text-red-600');
                         cocErr.textContent = '\u26A0 COC / License: Please complete all fields (' + missing.join(', ') + ').';
                         cocErr.classList.remove('hidden');
                     }
@@ -1689,9 +1728,13 @@ $todayDate = date('Y-m-d');
                     return validateDatePair(cocIssue, cocExpiry, 'COC / License', cocErr);
                 }
             } else {
-                if (cocErr) { cocErr.classList.add('hidden'); cocErr.textContent = ''; }
+                if (cocErr) {
+                    cocErr.classList.add('hidden');
+                    cocErr.classList.remove('text-amber-600', 'text-red-600');
+                    cocErr.textContent = '';
+                }
                 [cocType, cocNo, cocIssue, cocExpiry].forEach(function(el) {
-                    el.classList.remove('border-red-500', 'bg-red-50');
+                    el.classList.remove('border-red-500', 'bg-red-50', 'border-amber-500', 'bg-amber-50');
                     el.setCustomValidity('');
                 });
                 return true;
@@ -1736,6 +1779,8 @@ $todayDate = date('Y-m-d');
                 var rowLabel = nameVal ? nameVal : 'Training Certificate';
                 if (missing.length > 0) {
                     if (tErr) {
+                        tErr.classList.remove('text-amber-600');
+                        tErr.classList.add('text-red-600');
                         tErr.textContent = '\u26A0 ' + rowLabel + ': Please complete all fields (' + missing.join(', ') + ').';
                         tErr.classList.remove('hidden');
                     }
@@ -1744,9 +1789,13 @@ $todayDate = date('Y-m-d');
                     return validateDatePair(tIssue, tExpiry, rowLabel, tErr);
                 }
             } else {
-                if (tErr) { tErr.classList.add('hidden'); tErr.textContent = ''; }
+                if (tErr) {
+                    tErr.classList.add('hidden');
+                    tErr.classList.remove('text-amber-600', 'text-red-600');
+                    tErr.textContent = '';
+                }
                 [tName, tNo, tIssue, tExpiry].forEach(function(el) {
-                    if (el) { el.classList.remove('border-red-500', 'bg-red-50'); el.setCustomValidity(''); }
+                    if (el) { el.classList.remove('border-red-500', 'bg-red-50', 'border-amber-500', 'bg-amber-50'); el.setCustomValidity(''); }
                 });
                 return true;
             }
@@ -2196,6 +2245,18 @@ $todayDate = date('Y-m-d');
 
             document.getElementById('reviewTabContent-personal').innerHTML = html;
         }
+        function formatExpiryReview(dateStr) {
+            if (!dateStr || !dateStr.toString().trim()) return dateStr;
+            var trimmed = dateStr.toString().trim();
+            var expDate = new Date(trimmed);
+            var today = new Date();
+            today.setHours(0, 0, 0, 0);
+            if (!isNaN(expDate.getTime()) && expDate < today) {
+                return trimmed + ' <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-black bg-amber-100 text-amber-800 border border-amber-300 ml-1.5">EXPIRED</span>';
+            }
+            return trimmed;
+        }
+
         function populateDocumentsReview(formData) {
             const trainingNames = formData.getAll('training_name[]');
             const trainingNos = formData.getAll('training_no[]');
@@ -2212,7 +2273,7 @@ $todayDate = date('Y-m-d');
                         ${reviewField('Certificate Name', trainingNames[i])}
                         ${reviewField('Certificate No.', trainingNos[i])}
                         ${reviewField('Issue Date', trainingIssues[i])}
-                        ${reviewField('Expiry Date', trainingExpiries[i])}
+                        ${reviewField('Expiry Date', formatExpiryReview(trainingExpiries[i]))}
                     </div>
                 `;
             }
@@ -2240,14 +2301,14 @@ $todayDate = date('Y-m-d');
                             <p class="sm:col-span-4 text-xs font-black text-blue-700 uppercase">Passport</p>
                             ${reviewField('Document No.', formData.get('passport_no'))}
                             ${reviewField('Issue Date', formData.get('passport_issue'))}
-                            ${reviewField('Expiry Date', formData.get('passport_expiry'))}
+                            ${reviewField('Expiry Date', formatExpiryReview(formData.get('passport_expiry')))}
                             ${reviewField('Place Issued', formData.get('passport_place'))}
                         </div>
                         <div class="grid grid-cols-1 sm:grid-cols-4 gap-4 bg-slate-50 rounded-xl border border-slate-200 p-4">
                             <p class="sm:col-span-4 text-xs font-black text-blue-700 uppercase">Seaman's Book (SIRB)</p>
                             ${reviewField('Document No.', formData.get('sirb_no'))}
                             ${reviewField('Issue Date', formData.get('sirb_issue'))}
-                            ${reviewField('Expiry Date', formData.get('sirb_expiry'))}
+                            ${reviewField('Expiry Date', formatExpiryReview(formData.get('sirb_expiry')))}
                             ${reviewField('Place Issued', formData.get('sirb_place'))}
                         </div>
                         <div class="grid grid-cols-1 sm:grid-cols-4 gap-4 bg-slate-50 rounded-xl border border-slate-200 p-4">
@@ -2255,7 +2316,7 @@ $todayDate = date('Y-m-d');
                             ${hasGoc ? `
                                 ${reviewField('Document No.', gocNo)}
                                 ${reviewField('Issue Date', gocIssue)}
-                                ${reviewField('Expiry Date', gocExpiry)}
+                                ${reviewField('Expiry Date', formatExpiryReview(gocExpiry))}
                                 ${reviewField('Place Issued', gocPlace)}
                             ` : `<p class="sm:col-span-4 text-xs italic text-slate-400">No GOC License provided (Not applicable).</p>`}
                         </div>
@@ -2275,7 +2336,7 @@ $todayDate = date('Y-m-d');
                             ${reviewField('License Type', cocType)}
                             ${reviewField('No.', cocNo)}
                             ${reviewField('Issue Date', cocIssue)}
-                            ${reviewField('Expiry Date', cocExpiry)}
+                            ${reviewField('Expiry Date', formatExpiryReview(cocExpiry))}
                         ` : `<p class="sm:col-span-4 text-xs italic text-slate-400">No COC / License provided (Not applicable).</p>`}
                     </div>
                 </div>
