@@ -1,10 +1,13 @@
 import React, { useState } from 'react';
-import containerShipBg from '../assets/images/cargo_container_ship_1785313984424.jpg';
+import containerShipBg from '../assets/images/cargo_container_ship.jpg';
 import { SeafarerFormData } from '../types';
 import { User, Anchor, FileText, Upload, CheckCircle2, ArrowRight, ArrowLeft, AlertCircle } from 'lucide-react';
 
 interface ApplicationFormPageProps {
-  onSubmit: (formData: SeafarerFormData) => void;
+  onSubmit: (
+    formData: SeafarerFormData,
+    attachments: { passport: File | null; seamanBook: File | null; stcw: File | null },
+  ) => Promise<void>;
   onBack: () => void;
 }
 
@@ -48,10 +51,24 @@ export const ApplicationFormPage: React.FC<ApplicationFormPageProps> = ({ onSubm
   const [passportFile, setPassportFile] = useState<File | null>(null);
   const [seamanBookFile, setSeamanBookFile] = useState<File | null>(null);
   const [stcwFile, setStcwFile] = useState<File | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmit(formData);
+    setIsSubmitting(true);
+    setSubmitError('');
+    try {
+      await onSubmit(formData, {
+        passport: passportFile,
+        seamanBook: seamanBookFile,
+        stcw: stcwFile,
+      });
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : 'Your application could not be saved. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -137,6 +154,7 @@ export const ApplicationFormPage: React.FC<ApplicationFormPageProps> = ({ onSubm
                 <input
                   type="date"
                   required
+                  max={new Date().toISOString().split('T')[0]}
                   value={formData.dob}
                   onChange={(e) => {
                     const dobValue = e.target.value;
@@ -380,11 +398,18 @@ export const ApplicationFormPage: React.FC<ApplicationFormPageProps> = ({ onSubm
           </div>
 
           {/* Submit Button */}
+          {submitError && (
+            <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-800">
+              {submitError}
+            </p>
+          )}
+
           <button
             type="submit"
-            className="w-full py-4 px-6 rounded-full font-extrabold text-sm sm:text-base md:text-lg tracking-wider uppercase transition-all duration-300 shadow-xl bg-[#0042FB] hover:bg-blue-700 text-white flex items-center justify-center gap-2 cursor-pointer hover:shadow-2xl hover:shadow-blue-500/30 active:scale-[0.99]"
+            disabled={isSubmitting}
+            className="w-full py-4 px-6 rounded-full font-extrabold text-sm sm:text-base md:text-lg tracking-wider uppercase transition-all duration-300 shadow-xl bg-[#0042FB] hover:bg-blue-700 text-white flex items-center justify-center gap-2 cursor-pointer hover:shadow-2xl hover:shadow-blue-500/30 active:scale-[0.99] disabled:cursor-wait disabled:opacity-60"
           >
-            <span>SUBMIT SEAFARER APPLICATION</span>
+            <span>{isSubmitting ? 'SAVING APPLICATION...' : 'SUBMIT SEAFARER APPLICATION'}</span>
             <ArrowRight className="w-5 h-5" />
           </button>
         </form>

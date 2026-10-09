@@ -1,5 +1,5 @@
 import React from 'react';
-import containerShipBg from '../assets/images/cargo_container_ship_1785313984424.jpg';
+import containerShipBg from '../assets/images/cargo_container_ship.jpg';
 import { FileText, ArrowRight, ArrowLeft, CheckCircle2, AlertCircle, FileCheck, Anchor, ShieldCheck } from 'lucide-react';
 
 interface ApplicationGuidePageProps {

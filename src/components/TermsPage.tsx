@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import containerShipBg from '../assets/images/cargo_container_ship_1785313984424.jpg';
+import containerShipBg from '../assets/images/cargo_container_ship.jpg';
 import { ShieldCheck, ArrowRight, FileText, CheckCircle2 } from 'lucide-react';
 
 interface TermsPageProps {

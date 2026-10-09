@@ -5,105 +5,287 @@
  * Designed for XAMPP, WAMP, or `php -S localhost:8000`
  */
 
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
+session_start();
+require_once __DIR__ . '/config.php';
+
+// Philippine Time (UTC+8) for all date()/time stamps on this page
+date_default_timezone_set('Asia/Manila');
+
+$submitError = $_SESSION['submit_error'] ?? '';
+unset($_SESSION['submit_error']);
+
+function cleanStr(mixed $val): string {
+    return trim((string)($val ?? ''));
+}
+function nullIfBlank(string $val): ?string {
+    return $val === '' ? null : $val;
 }
 
-// Handle Form Submission POST with Strict Sanitization
-if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['action']) && $_POST['action'] === 'submit_application') {
-    $clean = [];
+// Handle Form Submission POST
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'submit_application') {
+    $lastName = cleanStr($_POST['last_name'] ?? '');
+    $firstName = cleanStr($_POST['first_name'] ?? '');
+    $middleName = cleanStr($_POST['middle_name'] ?? '');
+    $suffix = cleanStr($_POST['suffix'] ?? '');
+    $dob = cleanStr($_POST['dob'] ?? '');
+    $pob = cleanStr($_POST['pob'] ?? '');
+    $email = cleanStr($_POST['email'] ?? '');
+    $countryCode = cleanStr($_POST['country_code'] ?? '');
+    $phone = cleanStr($_POST['phone'] ?? '');
+    $fullMobile = trim($countryCode . ' ' . $phone);
+    $address = cleanStr($_POST['address'] ?? '');
+    $civilStatus = cleanStr($_POST['civil_status'] ?? '');
+    $wifeName = cleanStr($_POST['wife_name'] ?? '');
+    $facebook = cleanStr($_POST['facebook'] ?? '');
+    $viber = cleanStr($_POST['viber'] ?? '');
+    $whatsapp = cleanStr($_POST['whatsapp'] ?? '');
+    $skype = cleanStr($_POST['skype'] ?? '');
+    $posApplied = cleanStr($_POST['position_applied'] ?? '');
+    $howKnown = cleanStr($_POST['how_known'] ?? '');
+    $refName = cleanStr($_POST['referral_name'] ?? '');
+    $othersKnown = cleanStr($_POST['others_how_known'] ?? '');
+    $details = cleanStr($_POST['additional_details'] ?? '');
 
-    // Sanitize Single-Value Fields
-    $scalarFields = [
-        'position_applied', 'application_date', 'how_known', 'referral_name', 'others_how_known',
-        'last_name', 'first_name', 'middle_name', 'suffix', 'dob', 'pob', 'age', 'address',
-        'email', 'phone', 'civil_status', 'wife_name', 'pagibig_no', 'sss_no', 'philhealth_no',
-        'facebook', 'viber', 'whatsapp', 'skype', 'passport_no', 'passport_issue', 'passport_expiry',
-        'passport_place', 'sirb_no', 'sirb_issue', 'sirb_expiry', 'sirb_place', 'goc_no', 'goc_issue',
-        'goc_expiry', 'goc_place', 'coc_type', 'coc_no', 'coc_issue', 'coc_expiry', 'e_reg_no',
-        'sid_no', 'additional_details', 'is_cadet', 'photo_base64'
-    ];
+    $fullSource = $howKnown;
+    if ($refName !== '') $fullSource .= ' - ' . $refName;
+    if ($othersKnown !== '') $fullSource .= ' - ' . $othersKnown;
 
-    foreach ($scalarFields as $field) {
-        $clean[$field] = isset($_POST[$field]) ? trim((string)$_POST[$field]) : '';
-    }
+    $dateApplied = date('Y-m-d');
+    foreach (['date_from' => 'past', 'date_to' => 'future'] as $field => $allowedDirection) {
+        $experienceDates = $_POST[$field] ?? [];
+        if (!is_array($experienceDates)) {
+            continue;
+        }
 
-    // Server-Side Minimum Age Verification
-    if (!empty($clean['dob'])) {
-        try {
-            $dobDate = new DateTime($clean['dob']);
-            $now = new DateTime();
-            $ageDiff = $now->diff($dobDate);
-            if ($ageDiff->y < 18) {
-                header('Location: index.php?step=terms&error=underage');
+        foreach ($experienceDates as $experienceDate) {
+            $experienceDate = cleanStr($experienceDate);
+            if ($experienceDate === '') {
+                continue;
+            }
+
+            $parsedDate = DateTimeImmutable::createFromFormat('!Y-m-d', $experienceDate);
+            $isValidDate = $parsedDate && $parsedDate->format('Y-m-d') === $experienceDate;
+            $isOutOfRange = $allowedDirection === 'past'
+                ? $experienceDate > $dateApplied
+                : $experienceDate < $dateApplied;
+
+            if (
+                !$isValidDate
+                || $isOutOfRange
+            ) {
+                $_SESSION['submit_error'] = 'Experience start dates cannot be in the future, and end dates cannot be in the past.';
+                $_SESSION['application_data'] = $_POST;
+                header('Location: index.php?step=form');
                 exit;
             }
-            $clean['calculated_age'] = $ageDiff->y;
-        } catch (Exception $e) {
-            $clean['calculated_age'] = null;
         }
     }
 
-    // Normalize 1:N Training Certificates
-    $clean['certificates'] = [];
-    if (!empty($_POST['training_name']) && is_array($_POST['training_name'])) {
-        foreach ($_POST['training_name'] as $idx => $name) {
-            $nameTrim = trim((string)$name);
-            $noTrim = isset($_POST['training_no'][$idx]) ? trim((string)$_POST['training_no'][$idx]) : '';
-            if ($nameTrim !== '' || $noTrim !== '') {
-                $clean['certificates'][] = [
-                    'cert_name'   => $nameTrim,
-                    'cert_no'     => $noTrim,
-                    'issue_date'  => $_POST['training_issue'][$idx] ?? null,
-                    'expiry_date' => $_POST['training_expiry'][$idx] ?? null,
-                ];
+    try {
+        // Duplicate check
+        $dupStmt = $db->prepare(
+            'SELECT App_ID FROM applicant_info WHERE App_LName = ? AND App_FName = ? AND App_Bday = ? AND App_MobileNo = ? AND App_EmailAdd = ?'
+        );
+        $dupStmt->bind_param('sssss', $lastName, $firstName, $dob, $fullMobile, $email);
+        $dupStmt->execute();
+        $dupResult = $dupStmt->get_result();
+        if ($dupResult->num_rows > 0) {
+            $dupStmt->close();
+            $_SESSION['submit_error'] = 'An application with these personal details has already been submitted.';
+            $_SESSION['application_data'] = $_POST;
+            header('Location: index.php?step=form');
+            exit;
+        }
+        $dupStmt->close();
+
+        // Photo upload handling
+        $imageName = '';
+        if (isset($_FILES['photo']) && $_FILES['photo']['error'] === UPLOAD_ERR_OK) {
+            $allowedMime = ['image/jpeg' => 'jpg', 'image/png' => 'png'];
+            $finfo = new finfo(FILEINFO_MIME_TYPE);
+            $mime = $finfo->file($_FILES['photo']['tmp_name']);
+            if (isset($allowedMime[$mime])) {
+                if (!is_dir(UPLOAD_DIR)) {
+                    @mkdir(UPLOAD_DIR, 0755, true);
+                }
+                $imageName = bin2hex(random_bytes(8)) . '.' . $allowedMime[$mime];
+                move_uploaded_file($_FILES['photo']['tmp_name'], UPLOAD_DIR . $imageName);
             }
         }
-    }
 
-    // Normalize 1:N Sea Experiences
-    $clean['sea_service'] = [];
-    $isCadet = ($clean['is_cadet'] === '1');
+        $db->begin_transaction();
 
-    if (!$isCadet && !empty($_POST['vessel_name']) && is_array($_POST['vessel_name'])) {
-        foreach ($_POST['vessel_name'] as $idx => $vessel) {
-            $vesselTrim = trim((string)$vessel);
-            if ($vesselTrim !== '') {
-                $clean['sea_service'][] = [
-                    'vessel_name'    => $vesselTrim,
-                    'principal_name' => trim($_POST['principal_name'][$idx] ?? ''),
-                    'flag'           => trim($_POST['vessel_flag'][$idx] ?? ''),
-                    'nationality'    => trim($_POST['vessel_nat'][$idx] ?? ''),
-                    'manning_agency' => trim($_POST['manning_agency'][$idx] ?? ''),
-                    'rank'           => trim($_POST['exp_rank'][$idx] ?? ''),
-                    'vessel_type'    => trim($_POST['vessel_type'][$idx] ?? ''),
-                    'grt'            => trim($_POST['vessel_grt'][$idx] ?? ''),
-                    'engine_power'   => trim($_POST['engine_power'][$idx] ?? ''),
-                    'salary_usd'     => trim($_POST['salary'][$idx] ?? ''),
-                    'date_from'      => $_POST['date_from'][$idx] ?? null,
-                    'date_to'        => $_POST['date_to'][$idx] ?? null,
-                ];
+        $insStmt = $db->prepare(
+            'INSERT INTO applicant_info
+                (App_PositionApplied, App_LName, App_FName, App_MName, App_Bday, App_BPlace,
+                 App_EmailAdd, App_MobileNo, App_DateApplied, App_Address, App_CivilStat,
+                 App_WifeName, App_Facebook, App_Viber, App_WhatsApp, App_Skype, App_Status,
+                 App_Image, App_AddDetails, App_Consent, App_Source)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        );
+        $statusVal = 'Applicant';
+        $consentVal = 'YES';
+        $mNameVal = $middleName !== '' ? $middleName : null;
+        $wNameVal = $wifeName !== '' ? $wifeName : null;
+        $fbVal = $facebook !== '' ? $facebook : null;
+        $vibVal = $viber !== '' ? $viber : null;
+        $waVal = $whatsapp !== '' ? $whatsapp : null;
+        $skyVal = $skype !== '' ? $skype : null;
+        $detailsVal = $details !== '' ? $details : null;
+        $sourceVal = $fullSource !== '' ? $fullSource : 'Pure PHP Portal';
+
+        $insStmt->bind_param(
+            'sssssssssssssssssssss',
+            $posApplied, $lastName, $firstName, $mNameVal, $dob, $pob,
+            $email, $fullMobile, $dateApplied, $address, $civilStatus,
+            $wNameVal, $fbVal, $vibVal, $waVal, $skyVal, $statusVal,
+            $imageName, $detailsVal, $consentVal, $sourceVal
+        );
+        $insStmt->execute();
+        $insStmt->close();
+        $appId = (int)$db->insert_id;
+
+        // Helper for document insertion
+        $docStmt = $db->prepare(
+            'INSERT INTO applicant_doc (AppDoc_Name, AppDoc_Shortcut, AppDoc_No, AppDoc_DateIssued, AppDoc_DateExpired, AppDoc_Place, App_ID, Document_ID)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+        );
+
+        $addDoc = function(string $name, string $short, string $no, string $iss, string $exp, string $place, int $docId) use ($docStmt, $appId) {
+            if ($no === '') return;
+            $issVal = nullIfBlank($iss);
+            $expVal = nullIfBlank($exp);
+            $plcVal = nullIfBlank($place);
+            $docStmt->bind_param('ssssssii', $name, $short, $no, $issVal, $expVal, $plcVal, $appId, $docId);
+            $docStmt->execute();
+        };
+
+        // Standard Documents
+        $addDoc('PASSPORT', 'PASSPORT', strtoupper(cleanStr($_POST['passport_no'] ?? '')), cleanStr($_POST['passport_issue'] ?? ''), cleanStr($_POST['passport_expiry'] ?? ''), cleanStr($_POST['passport_place'] ?? ''), 1003);
+        $addDoc("Seaman's Book", 'SIRB', strtoupper(cleanStr($_POST['sirb_no'] ?? '')), cleanStr($_POST['sirb_issue'] ?? ''), cleanStr($_POST['sirb_expiry'] ?? ''), cleanStr($_POST['sirb_place'] ?? ''), 1004);
+        $addDoc('GOC Licensed', 'GOC', cleanStr($_POST['goc_no'] ?? ''), cleanStr($_POST['goc_issue'] ?? ''), cleanStr($_POST['goc_expiry'] ?? ''), cleanStr($_POST['goc_place'] ?? ''), 1013);
+        $cocType = cleanStr($_POST['coc_type'] ?? '');
+        $addDoc($cocType !== '' ? $cocType : 'COC Marina', 'COC', cleanStr($_POST['coc_no'] ?? ''), cleanStr($_POST['coc_issue'] ?? ''), cleanStr($_POST['coc_expiry'] ?? ''), '', 1011);
+        $addDoc('E-Registration Number', 'E-Reg Number', cleanStr($_POST['e_reg_no'] ?? ''), '', '', '', 1623);
+        $addDoc('Seafarer Identification Document', 'SID', cleanStr($_POST['sid_no'] ?? ''), '', '', '', 1704);
+
+        // Training Certificates
+        $trNames = $_POST['training_name'] ?? [];
+        $trNos = $_POST['training_no'] ?? [];
+        $trIssues = $_POST['training_issue'] ?? [];
+        $trExpiries = $_POST['training_expiry'] ?? [];
+        if (is_array($trNames)) {
+            for ($i = 0; $i < count($trNames); $i++) {
+                $tName = cleanStr($trNames[$i] ?? '');
+                $tNo = cleanStr($trNos[$i] ?? '');
+                if ($tName !== '' || $tNo !== '') {
+                    $addDoc($tName ?: 'Training Certificate', 'TRAIN', $tNo, cleanStr($trIssues[$i] ?? ''), cleanStr($trExpiries[$i] ?? ''), '', 1000);
+                }
             }
         }
-    }
+        $docStmt->close();
 
-    $_SESSION['application_data'] = $clean;
-    $_SESSION['submitted_at'] = date('F j, Y, g:i a');
-    header('Location: index.php?step=success');
-    exit;
+        // Shipboard Experience
+        $pNames = $_POST['principal_name'] ?? [];
+        $vNames = $_POST['vessel_name'] ?? [];
+        $flags = $_POST['vessel_flag'] ?? [];
+        $nats = $_POST['vessel_nat'] ?? [];
+        $agencies = $_POST['manning_agency'] ?? [];
+        $ranks = $_POST['exp_rank'] ?? [];
+        $vTypes = $_POST['vessel_type'] ?? [];
+        $grts = $_POST['vessel_grt'] ?? [];
+        $bhps = $_POST['engine_power'] ?? [];
+        $salaries = $_POST['salary'] ?? [];
+        $fromDates = $_POST['date_from'] ?? [];
+        $toDates = $_POST['date_to'] ?? [];
+
+        if (is_array($pNames) && count($pNames) > 0) {
+            $seaStmt = $db->prepare(
+                'INSERT INTO applicant_seaservice
+                    (App_PrincipalName, App_VesselName, App_ImportFlag, App_Nationality, App_Agency,
+                     App_Rank, App_VesselType, App_Grt, App_BHP, App_Salary,
+                     App_DateSignedON, App_DateSignedOFF, App_Duration, App_ID)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+            );
+            for ($i = 0; $i < count($pNames); $i++) {
+                $pn = cleanStr($pNames[$i] ?? '');
+                $vn = cleanStr($vNames[$i] ?? '');
+                if ($pn === '' && $vn === '') continue;
+
+                $vf = cleanStr($flags[$i] ?? '');
+                $vt = cleanStr($vTypes[$i] ?? '');
+                $fr = cleanStr($fromDates[$i] ?? '');
+                $to = cleanStr($toDates[$i] ?? '');
+                // Sea service dates cannot be in the future
+                if ($fr !== '' && $fr > $dateApplied) {
+                    $fr = $dateApplied;
+                }
+                if ($to !== '' && $to > $dateApplied) {
+                    $to = $dateApplied;
+                }
+                $dur = '';
+                if ($fr !== '' && $to !== '') {
+                    try {
+                        $sDate = new DateTime($fr);
+                        $eDate = new DateTime($to);
+                        if ($eDate < $sDate) {
+                            [$sDate, $eDate] = [$eDate, $sDate];
+                        }
+                        $diff = $sDate->diff($eDate);
+                        $dur = (($diff->y * 12) + $diff->m) . '.' . $diff->d;
+                    } catch (Throwable) {}
+                }
+                $frVal = nullIfBlank($fr);
+                $toVal = nullIfBlank($to);
+                $na = cleanStr($nats[$i] ?? '');
+                $ag = cleanStr($agencies[$i] ?? '');
+                $rk = cleanStr($ranks[$i] ?? '');
+                $gr = cleanStr($grts[$i] ?? '');
+                $bp = cleanStr($bhps[$i] ?? '');
+                $sl = cleanStr($salaries[$i] ?? '');
+
+                $seaStmt->bind_param('sssssssssssssi', $pn, $vn, $vf, $na, $ag, $rk, $vt, $gr, $bp, $sl, $frVal, $toVal, $dur, $appId);
+                $seaStmt->execute();
+            }
+            $seaStmt->close();
+        }
+
+        $db->commit();
+
+        $refNumber = 'CSI-' . str_pad((string)$appId, 6, '0', STR_PAD_LEFT);
+        $_SESSION['application_data'] = $_POST;
+        $_SESSION['submitted_at'] = date('F j, Y, g:i a');
+        $_SESSION['ref_number'] = $refNumber;
+        header('Location: index.php?step=success');
+        exit;
+    } catch (Throwable $e) {
+        if ($db instanceof mysqli && @$db->ping()) {
+            @$db->rollback();
+        }
+        error_log('Application submission failed in index.php: ' . $e->getMessage());
+        $_SESSION['submit_error'] = 'An unexpected error occurred while saving your application. Please try again.';
+        $_SESSION['application_data'] = $_POST;
+        header('Location: index.php?step=form');
+        exit;
+    }
+}
+
+// Load ranks dynamically from remote database
+$dbRanks = [];
+try {
+    $rRes = $db->query('SELECT rank_name FROM rank_list ORDER BY rank_name');
+    while ($rRow = $rRes->fetch_assoc()) {
+        $dbRanks[] = $rRow['rank_name'];
+    }
+} catch (Throwable $e) {
+    error_log('Failed to fetch ranks from DB: ' . $e->getMessage());
 }
 
 $step = $_GET['step'] ?? 'terms';
-
-// Guard against direct ?step=success URL visits when no session data exists
-if ($step === 'success' && empty($_SESSION['application_data'])) {
-    header('Location: index.php?step=terms');
-    exit;
-}
-
 $appData = $_SESSION['application_data'] ?? [];
 $submittedAt = $_SESSION['submitted_at'] ?? '';
-$todayDate = date('Y-m-d');
+$refNumber = $_SESSION['ref_number'] ?? '';
+$todayDate = date('Y-m-d'); // used to cap date pickers so tomorrow/future dates are disabled
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -117,7 +299,7 @@ $todayDate = date('Y-m-d');
     <style>
         body { font-family: 'Plus Jakarta Sans', sans-serif; }
         .bg-ocean-port {
-            background-image: linear-gradient(to bottom, rgba(15, 23, 42, 0.65), rgba(15, 23, 42, 0.75)), url('src/assets/images/application-background.jpg');
+            background-image: linear-gradient(to bottom, rgba(15, 23, 42, 0.65), rgba(15, 23, 42, 0.75)), url('src/assets/images/bg_new.jpg');
             background-size: cover;
             background-position: center;
             background-attachment: fixed;
@@ -148,21 +330,9 @@ $todayDate = date('Y-m-d');
                 </div>
             </div>
 
-            <div class="flex items-center gap-3">
-                <!-- Quick Step Badge -->
-                <div id="headerStepBadge" class="hidden sm:flex items-center gap-2 bg-slate-100 px-3.5 py-1.5 rounded-full text-xs font-bold text-slate-700 shadow-sm border border-slate-200">
-                    <?php if ($step === 'success'): ?>
-                        <span class="w-2 h-2 rounded-full bg-emerald-500"></span><span>Submitted</span>
-                    <?php else: ?>
-                        <span class="w-2 h-2 rounded-full bg-slate-400"></span><span>Terms &amp; Conditions</span>
-                    <?php endif; ?>
-                </div>
+            <!-- Quick Step Badge -->
+            <div class="hidden sm:flex items-center gap-2 bg-slate-100 px-3 py-1.5 rounded-full text-xs font-bold text-slate-700">
 
-                <!-- Explicit "New Applicant" Kiosk Reset Button -->
-                <button type="button" onclick="startNewApplicant()" title="Reset form and start fresh for a new applicant" class="px-3.5 py-1.5 rounded-full text-xs font-black tracking-wide uppercase transition-all duration-200 border border-slate-300 bg-white text-slate-700 hover:bg-red-50 hover:text-red-700 hover:border-red-300 shadow-sm flex items-center gap-1.5 shrink-0 cursor-pointer">
-                    <span class="text-sm">🔄</span>
-                    <span>New Applicant</span>
-                </button>
             </div>
         </div>
         <div class="h-1.5 w-full bg-slate-200">
@@ -173,25 +343,22 @@ $todayDate = date('Y-m-d');
     <!-- Main Section -->
     <main class="flex-1 py-8 px-4 sm:px-6 lg:px-8 max-w-6xl mx-auto w-full">
 
+        <?php if (!empty($submitError)): ?>
+            <div class="mb-6 p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-sm font-semibold flex items-center gap-3 shadow-md">
+                <span class="text-xl">⚠️</span>
+                <span><?php echo htmlspecialchars($submitError); ?></span>
+            </div>
+        <?php endif; ?>
+
         <!-- Client-Side Form Wizard Handler -->
         <form id="seafarerForm" action="index.php" method="POST" enctype="multipart/form-data" class="space-y-6">
             <input type="hidden" name="action" value="submit_application">
-            <input type="hidden" name="photo_base64" id="photoBase64">
-            <input type="hidden" name="is_cadet" id="isCadetInput" value="0">
+
             <!-- ================= STEP 0: TERMS & CONDITIONS ================= -->
             <div id="step-terms" class="step-page space-y-6 <?php echo $step !== 'terms' && $step !== '' ? 'hidden' : ''; ?>">
-                <?php if (isset($_GET['error']) && $_GET['error'] === 'underage'): ?>
-                <div class="bg-red-600/95 backdrop-blur-md border-2 border-red-300 text-white p-4 rounded-2xl shadow-2xl flex items-center gap-3">
-                    <span class="text-2xl">&#9888;</span>
-                    <div>
-                        <p class="font-black text-sm uppercase tracking-wide">Application Rejected (Underage)</p>
-                        <p class="text-xs text-white/90">You must be at least 18 years of age to apply in compliance with Maritime Labour Convention (MLC 2006) standards.</p>
-                    </div>
-                </div>
-                <?php endif; ?>
                 <div class="text-center space-y-1">
                     <p class="text-white/90 text-xs sm:text-sm font-bold tracking-wider uppercase drop-shadow-sm">
-                        CRYSTAL SHIPPING INC - IEAC APPLICATION
+                        CRYSTAL SHIPPING INC - APPLICATION
                     </p>
                     <h1 class="text-white text-3xl sm:text-4xl md:text-5xl font-black tracking-tight uppercase drop-shadow-md">
                         TERMS & CONDITION
@@ -199,18 +366,14 @@ $todayDate = date('Y-m-d');
                 </div>
 
                 <!-- Glassmorphism Scrollable Box -->
-                <div class="w-full bg-white/90 backdrop-blur-md rounded-3xl p-6 sm:p-8 md:p-10 shadow-2xl border border-white/40 max-h-[420px] overflow-y-auto custom-scrollbar text-slate-800 space-y-5 text-sm leading-relaxed">
-                    <p class="font-bold text-slate-900 text-base border-b border-slate-300 pb-2">
-                        Official Seafarer Recruitment & IEAC Application Terms
-                    </p>
+                <div class="w-full bg-white/90 backdrop-blur-md rounded-3xl p-6 sm:p-8 md:p-10 shadow-2xl border border-white/40 max-h-[420px] overflow-y-auto custom-scrollbar text-slate-800 space-y-5 text-base leading-relaxed">
+                    <p>Crystal Shipping’s Data Privacy Manual establishes rules for protecting personal information in compliance with the Data Privacy Act of 2012 (RA 10173), its IRR, and NPC issuances. It follows the principles of transparency, legitimate purpose, and proportionality. Personal data must only be collected when necessary, used for legitimate purposes, and accessed by authorized personnel. Data subjects have rights to be informed, access their information, request corrections, and file complaints.</p>
 
-                    <p><strong>1. Purpose and Scope of Application:</strong> This Application Form is issued by Crystal Shipping Inc. for seafarers applying for maritime deployment and International Educational and Assessment Clearance (IEAC). All information requested is vital for evaluation, qualification verification, and compliance with POEA, DMW, and IMO standards.</p>
+                    <p>The Manual classifies information as Public, Confidential, or Classified, with stricter controls for sensitive and highly restricted information. Departments must obtain consent or have another lawful basis for processing and must ensure information remains accurate and secure.</p>
 
-                    <p><strong>2. Accuracy and Authenticity Declaration:</strong> By completing this form, the applicant declares under penalty of administrative or legal disqualification that all personal details, sea service records, STCW certificates, medical records, and travel documents submitted are authentic, complete, and accurate.</p>
+                    <p>IT and authorized personnel are responsible for protecting databases, systems, physical records, and network infrastructure from unauthorized access, loss, misuse, modification, or disclosure. Personal information must only be retained as necessary and securely destroyed when no longer required.</p>
 
-                    <p><strong>3. Data Privacy Consent:</strong> I hereby certify that all information provided in this application is true, accurate, and complete. In compliance with Republic Act No. 10173 (Data Privacy Act of 2012) and its Implementing Rules and Regulations (IRR), I voluntarily give my free and informed consent to Crystal Shipping Inc. to collect, record, organize, store, update, process, and transfer my personal and sensitive personal information to prospective foreign shipowners, maritime principals, and relevant regulatory authorities solely for the purpose of recruitment, qualification evaluation, and sea deployment.</p>
-
-                    <p><strong>4. Zero Placement Fee Policy:</strong> Crystal Shipping Inc. adheres strictly to a <strong>Zero Placement Fee Policy</strong>. No fee, charge, or monetary commission shall be solicited or collected from any seafarer at any stage of recruitment.</p>
+                    <p>Any suspected breach, unauthorized access, loss, disclosure, or destruction of personal information must be reported immediately to the DPO/Data Privacy Response Team. Serious breaches may require notification to the NPC and affected individuals within 72 hours, when applicable. <a href="http://crystalshippinginc.com/PDF/Crystal_Privacy_Manual.pdf" target="_blank" rel="noopener noreferrer" class="font-bold text-blue-700 underline hover:text-blue-900">Click here to view the full content.</a></p>
                 </div>
 
                 <!-- Terms Checkbox Card -->
@@ -230,9 +393,9 @@ $todayDate = date('Y-m-d');
 
             <!-- ================= STEP 1: HOW THE APPLICATION WORKS ================= -->
             <div id="step-guide" class="step-page space-y-10 hidden">
-                <div class="text-center space-y-1">
+                <div class="text-center space-y-1 -mt-4 sm:-mt-6">
                     <p class="text-white/90 text-xs sm:text-sm font-bold tracking-wider uppercase drop-shadow-sm">
-                        CRYSTAL SHIPPING INC - IEAC APPLICATION
+                        CRYSTAL SHIPPING INC - APPLICATION
                     </p>
                     <h1 class="text-white text-3xl sm:text-4xl md:text-5xl font-black tracking-tight uppercase drop-shadow-md">
                         HOW THE APPLICATION WORKS
@@ -259,7 +422,7 @@ $todayDate = date('Y-m-d');
                             <li>• Date & Place of Birth</li>
                             <li>• Complete home address</li>
                             <li>• Email address & contact number</li>
-                            <li>• Civil status & wife's name (if applicable)</li>
+                            <li>• Civil status </li>
                         </ul>
                     </div>
 
@@ -277,7 +440,7 @@ $todayDate = date('Y-m-d');
                         </div>
                         <p class="text-xs text-slate-600 mb-3">Enter the details of your maritime documents, licenses, certifications, and training certificates. Make sure all expiry dates are current.</p>
                         <ul class="text-xs space-y-1.5 text-slate-700 font-medium">
-                            <li>• Primary documents: Passport, SIRB, SID</li>
+                            <li>• Primary documents: Passport, SIRB</li>
                             <li>• COC / License (MARINA-issued)</li>
                             <li>• E-Registration details</li>
                             <li>• Training certificates (BST, GMDSS, ECDIS)</li>
@@ -339,7 +502,7 @@ $todayDate = date('Y-m-d');
             <div id="step-personal" class="step-page space-y-6 hidden">
                 <!-- Page Title Header -->
                 <div class="bg-white/90 backdrop-blur-md rounded-2xl p-4 sm:p-5 shadow-lg border border-white/50 flex items-center gap-4">
-                    <div class="w-12 h-12 rounded-xl bg-slate-900 text-white flex items-center justify-center text-2xl font-black shrink-0">
+                    <div class="w-12 h-12 rounded-xl text-white flex items-center justify-center text-2xl font-black shrink-0">
                         👤
                     </div>
                     <div>
@@ -372,34 +535,34 @@ $todayDate = date('Y-m-d');
                             <div class="md:col-span-3 grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div>
                                     <label class="block text-xs font-bold text-slate-700 uppercase mb-1">POSITION APPLIED <span class="text-red-600">*</span></label>
-                                    <select name="position_applied" id="positionApplied" required class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-xs font-semibold focus:ring-2 focus:ring-blue-500 outline-none">
+                                    <select name="position_applied" required class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-xs font-semibold focus:ring-2 focus:ring-blue-500 outline-none">
                                         <option value="">Select Position...</option>
-                                        <optgroup label="Cadetship Program">
-                                            <option value="Deck Cadet">Deck Cadet</option>
-                                            <option value="Engine Cadet">Engine Cadet</option>
-                                        </optgroup>
-                                        <optgroup label="Deck Department">
-                                            <option value="Captain / Master">Captain / Master</option>
-                                            <option value="Chief Mate">Chief Mate</option>
-                                            <option value="2nd Mate">2nd Mate</option>
-                                            <option value="3rd Mate">3rd Mate</option>
-                                            <option value="Bosun">Bosun</option>
-                                            <option value="Able Seaman (AB)">Able Seaman (AB)</option>
-                                            <option value="Ordinary Seaman (OS)">Ordinary Seaman (OS)</option>
-                                        </optgroup>
-                                        <optgroup label="Engine Department">
-                                            <option value="Chief Engineer">Chief Engineer</option>
-                                            <option value="2nd Engineer">2nd Engineer</option>
-                                            <option value="3rd Engineer">3rd Engineer</option>
-                                            <option value="4th Engineer">4th Engineer</option>
-                                            <option value="Electro-Technical Officer (ETO)">Electro-Technical Officer (ETO)</option>
-                                            <option value="Oiler / Motorman">Oiler / Motorman</option>
-                                            <option value="Wiper">Wiper</option>
-                                        </optgroup>
-                                        <optgroup label="Catering & Hospitality">
-                                            <option value="Chief Cook">Chief Cook</option>
-                                            <option value="Messman">Messman</option>
-                                        </optgroup>
+                                        <?php if (!empty($dbRanks)): ?>
+                                            <?php foreach ($dbRanks as $rName): ?>
+                                                <option value="<?php echo htmlspecialchars($rName); ?>"><?php echo htmlspecialchars($rName); ?></option>
+                                            <?php endforeach; ?>
+                                        <?php else: ?>
+                                            <optgroup label="Deck Department">
+                                                <option value="Captain / Master">Captain / Master</option>
+                                                <option value="Chief Mate">Chief Mate</option>
+                                                <option value="2nd Mate">2nd Mate</option>
+                                                <option value="3rd Mate">3rd Mate</option>
+                                                <option value="Bosun">Bosun</option>
+                                                <option value="Able Seaman (AB)">Able Seaman (AB)</option>
+                                                <option value="Ordinary Seaman (OS)">Ordinary Seaman (OS)</option>
+                                            </optgroup>
+                                            <optgroup label="Engine Department">
+                                                <option value="Chief Engineer">Chief Engineer</option>
+                                                <option value="2nd Engineer">2nd Engineer</option>
+                                                <option value="3rd Engineer">3rd Engineer</option>
+                                                <option value="Oiler / Motorman">Oiler / Motorman</option>
+                                                <option value="Wiper">Wiper</option>
+                                            </optgroup>
+                                            <optgroup label="Catering">
+                                                <option value="Chief Cook">Chief Cook</option>
+                                                <option value="Messman">Messman</option>
+                                            </optgroup>
+                                        <?php endif; ?>
                                     </select>
                                 </div>
 
@@ -425,12 +588,12 @@ $todayDate = date('Y-m-d');
 
                                 <div id="referralNameField" class="sm:col-span-2 hidden">
                                     <label class="block text-xs font-bold text-slate-700 uppercase mb-1">NAME WHO REFERRED YOU</label>
-                                    <input type="text" name="referral_name" id="referralNameInput" placeholder="Enter Referrer's Name" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-xs font-semibold focus:ring-2 focus:ring-blue-500 outline-none">
+                                    <input type="text" name="referral_name" placeholder="Enter Referrer's Name" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-xs font-semibold focus:ring-2 focus:ring-blue-500 outline-none">
                                 </div>
 
                                 <div id="othersHowKnownField" class="sm:col-span-2 hidden">
                                     <label class="block text-xs font-bold text-slate-700 uppercase mb-1">WHERE DID YOU SEE CRYSTAL?</label>
-                                    <input type="text" name="others_how_known" id="othersHowKnownInput" placeholder="Please specify" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-xs font-semibold focus:ring-2 focus:ring-blue-500 outline-none">
+                                    <input type="text" name="others_how_known" placeholder="Please specify" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-xs font-semibold focus:ring-2 focus:ring-blue-500 outline-none">
                                 </div>
                             </div>
                         </div>
@@ -481,7 +644,7 @@ $todayDate = date('Y-m-d');
 
                         <div>
                             <label class="block text-xs font-bold text-slate-700 uppercase mb-1">AGE</label>
-                            <input type="text" id="ageField" name="age" readonly placeholder="[AUTO CALCULATED AGE]" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-slate-100 text-xs font-semibold text-slate-600 outline-none">
+                            <input type="text" id="ageField" name="age" readonly class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-slate-100 text-xs font-semibold text-slate-600 outline-none">
                         </div>
 
                         <div class="sm:col-span-3">
@@ -515,7 +678,6 @@ $todayDate = date('Y-m-d');
                         if (!dobInput.value || isNaN(age)) {
                             ageField.value = '';
                             ageField.classList.remove('border-red-500', 'bg-red-50', 'text-red-700');
-                            ageField.classList.add('bg-slate-100', 'text-slate-600');
                             errorMsg.classList.add('hidden');
                             dobInput.setCustomValidity('');
                             return age;
@@ -550,29 +712,149 @@ $todayDate = date('Y-m-d');
                                 <label class="block text-xs font-bold text-slate-700 uppercase mb-1">EMAIL ADDRESS <span class="text-red-600">*</span></label>
                                 <input type="email" name="email" required placeholder="seafarer@example.com" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-xs font-semibold focus:ring-2 focus:ring-blue-500 outline-none">
                             </div>
-                            <div>
-                                <label class="block text-xs font-bold text-slate-700 uppercase mb-1">CONTACT NUMBER <span class="text-red-600">*</span></label>
-                                <input type="tel" name="phone" id="phoneInput" required 
-                                    placeholder="e.g. +63 917 123 4567"
-                                    pattern="^\+?[0-9\s\-\(\)]{7,20}$"
-                                    title="Please enter a valid phone number (7-20 digits, may include + prefix)."
-                                    inputmode="tel"
-                                    autocomplete="tel"
-                                    class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-xs font-semibold focus:ring-2 focus:ring-blue-500 outline-none">
-                                <p class="text-[10px] text-slate-500 mt-1">Include country code (e.g. +63 for Philippines).</p>
-                            </div>
+
+        <div>
+            <label class="block text-xs font-bold text-slate-700 uppercase mb-1">
+                CONTACT NUMBER <span class="text-red-600">*</span>
+            </label>
+
+            <div class="flex">
+                <!-- Country Code -->
+                <select
+                    name="country_code"
+                    id="countryCodeSelect"
+                    required
+                    onchange="updatePhoneConstraints()"
+                    class="w-32 px-2 py-2.5 rounded-l-xl border border-slate-300 bg-slate-100 text-xs font-semibold focus:ring-2 focus:ring-blue-500 outline-none"
+                >
+                    <option value="+63">PH +63</option>
+                    <option value="+1">USA +1</option>
+                    <option value="+44">UK +44</option>
+                    <option value="+81">JPN +81</option>
+                    <option value="+82">KOR +82</option>
+                    <option value="+86">CHN +86</option>
+                    <option value="+65">SGP +65</option>
+                    <option value="+971">UAE +971</option>
+                    <option value="+966">SAU +966</option>
+                    <option value="+61">AUS +61</option>
+                    <option value="+64">NZL +64</option>
+                    <option value="+49">DEU +49</option>
+                    <option value="+33">FRA +33</option>
+                    <option value="+39">ITA +39</option>
+                    <option value="+34">ESP +34</option>
+                    <option value="+31">NLD +31</option>
+                    <option value="+91">IND +91</option>
+                    <option value="+62">IDN +62</option>
+                    <option value="+60">MYS +60</option>
+                    <option value="+66">THA +66</option>
+                    <option value="+84">VNM +84</option>
+                    <option value="+880">BGD +880</option>
+                    <option value="+92">PAK +92</option>
+                    <option value="+7">RUS +7</option>
+                    <option value="+55">BRA +55</option>
+                    <option value="+52">MEX +52</option>
+                    <option value="+27">ZAF +27</option>
+                </select>
+
+                <!-- Phone Number -->
+                <input
+                    type="tel"
+                    name="phone"
+                    id="phoneInput"
+                    required
+                    placeholder="Enter contact number"
+                    inputmode="numeric"
+                    oninput="this.value = this.value.replace(/[^0-9]/g, ''); validatePhoneLength();"
+                    class="w-full px-3.5 py-2.5 rounded-r-xl border border-l-0 border-slate-300 bg-white text-xs font-semibold focus:ring-2 focus:ring-blue-500 outline-none"
+                >
+            </div>
+
+                <p id="phone_hint" class="text-[10px] text-slate-500 mt-1">
+                    Select your country, then enter your contact number.
+                </p>
+            </div>
+
+            <script>
+                // Expected number of digits (excluding the country code) per country.
+                // Used to cap how many digits can be typed AND to validate the exact length
+                // before the form is allowed to proceed. Falls back to a generous 15 for
+                // any country code not explicitly listed.
+                const phoneDigitLengths = {
+                    '+63': 10,  // Philippines
+                    '+1': 10,   // USA / Canada
+                    '+44': 10,  // United Kingdom
+                    '+81': 10,  // Japan
+                    '+82': 10,  // South Korea
+                    '+86': 11,  // China
+                    '+65': 8,   // Singapore
+                    '+971': 9,  // UAE
+                    '+966': 9,  // Saudi Arabia
+                    '+61': 9,   // Australia
+                    '+64': 9,   // New Zealand
+                    '+49': 11,  // Germany
+                    '+33': 9,   // France
+                    '+39': 10,  // Italy
+                    '+34': 9,   // Spain
+                    '+31': 9,   // Netherlands
+                    '+91': 10,  // India
+                    '+62': 11,  // Indonesia
+                    '+60': 10,  // Malaysia
+                    '+66': 9,   // Thailand
+                    '+84': 9,   // Vietnam
+                    '+880': 10, // Bangladesh
+                    '+92': 10,  // Pakistan
+                    '+7': 10,   // Russia
+                    '+55': 11,  // Brazil
+                    '+52': 10,  // Mexico
+                    '+27': 9    // South Africa
+                };
+
+                function updatePhoneConstraints() {
+                    const countrySelect = document.getElementById('countryCodeSelect');
+                    const phoneInput = document.getElementById('phoneInput');
+                    const hint = document.getElementById('phone_hint');
+                    const code = countrySelect.value;
+                    const requiredLength = phoneDigitLengths[code] || 15;
+
+                    phoneInput.setAttribute('maxlength', requiredLength);
+
+                    validatePhoneLength();
+                }
+
+                function validatePhoneLength() {
+                    const countrySelect = document.getElementById('countryCodeSelect');
+                    const phoneInput = document.getElementById('phoneInput');
+                    const code = countrySelect.value;
+                    const requiredLength = phoneDigitLengths[code] || null;
+
+                    if (!requiredLength) {
+                        phoneInput.setCustomValidity('');
+                        return;
+                    }
+
+                    if (phoneInput.value.length > 0 && phoneInput.value.length !== requiredLength) {
+                        phoneInput.setCustomValidity(`Contact number must be exactly ${requiredLength} digits for the selected country.`);
+                    } else {
+                        phoneInput.setCustomValidity('');
+                    }
+                }
+
+                // Set the correct maxlength/hint for the default selected country (Philippines) on load
+                document.addEventListener('DOMContentLoaded', updatePhoneConstraints);
+            </script>
+
                             <div>
                                 <label class="block text-xs font-bold text-slate-700 uppercase mb-1">CIVIL STATUS <span class="text-red-600">*</span></label>
-                                <select name="civil_status" id="civilStatusSelect" required onchange="toggleWifeNameField()" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-xs font-semibold focus:ring-2 focus:ring-blue-500 outline-none">
+                                <select name="civil_status" required class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-xs font-semibold focus:ring-2 focus:ring-blue-500 outline-none">
                                     <option value="Single">Single</option>
                                     <option value="Married">Married</option>
                                     <option value="Widowed">Widowed</option>
                                     <option value="Separated">Separated</option>
                                 </select>
                             </div>
-                            <div id="wifeNameContainer" class="hidden">
-                                <label class="block text-xs font-bold text-slate-700 uppercase mb-1">WIFE'S NAME <span class="text-slate-400 font-normal">(if applicable)</span></label>
-                                <input type="text" name="wife_name" id="wifeNameInput" placeholder="Enter Spouse Name" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-xs font-semibold focus:ring-2 focus:ring-blue-500 outline-none">
+                            <div>
+                                <label class="block text-xs font-bold text-slate-700 uppercase mb-1">PARTNER'S NAME <span class="text-slate-400 font-normal">(if applicable)</span></label>
+                                <input type="text" name="wife_name" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-xs font-semibold focus:ring-2 focus:ring-blue-500 outline-none">
                             </div>
                         </div>
                     </div>
@@ -585,36 +867,15 @@ $todayDate = date('Y-m-d');
                         <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
                             <div>
                                 <label class="block text-xs font-bold text-slate-700 uppercase mb-1">PAG-IBIG NO.</label>
-                                <input type="text" name="pagibig_no" id="pagibigNo" placeholder="e.g. 1234-5678-9012"
-                                    maxlength="14"
-                                    pattern="^(?:\d{4}-\d{4}-\d{4}|\d{12})?$"
-                                    title="Pag-IBIG Number must be 12 digits (format: 1234-5678-9012 or 12 consecutive digits)"
-                                    inputmode="numeric"
-                                    oninput="formatPagibig(this)"
-                                    class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-xs font-semibold focus:ring-2 focus:ring-blue-500 outline-none">
-                                <p class="text-[10px] text-slate-500 mt-1">12 digits (e.g. 1234-5678-9012)</p>
+                                <input type="text" name="pagibig_no" placeholder="Enter Pag-IBIG Number" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-xs font-semibold focus:ring-2 focus:ring-blue-500 outline-none">
                             </div>
                             <div>
                                 <label class="block text-xs font-bold text-slate-700 uppercase mb-1">SSS NO.</label>
-                                <input type="text" name="sss_no" id="sssNo" placeholder="e.g. 01-2345678-9"
-                                    maxlength="12"
-                                    pattern="^(?:\d{2}-\d{7}-\d{1}|\d{10})?$"
-                                    title="SSS Number must be 10 digits (format: 01-2345678-9 or 10 consecutive digits)"
-                                    inputmode="numeric"
-                                    oninput="formatSss(this)"
-                                    class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-xs font-semibold focus:ring-2 focus:ring-blue-500 outline-none">
-                                <p class="text-[10px] text-slate-500 mt-1">10 digits (e.g. 01-2345678-9)</p>
+                                <input type="text" name="sss_no" placeholder="Enter SSS Number" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-xs font-semibold focus:ring-2 focus:ring-blue-500 outline-none">
                             </div>
                             <div>
                                 <label class="block text-xs font-bold text-slate-700 uppercase mb-1">PHILHEALTH NO.</label>
-                                <input type="text" name="philhealth_no" id="philhealthNo" placeholder="e.g. 12-345678901-2"
-                                    maxlength="14"
-                                    pattern="^(?:\d{2}-\d{9}-\d{1}|\d{12})?$"
-                                    title="PhilHealth Number must be 12 digits (format: 12-345678901-2 or 12 consecutive digits)"
-                                    inputmode="numeric"
-                                    oninput="formatPhilhealth(this)"
-                                    class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-xs font-semibold focus:ring-2 focus:ring-blue-500 outline-none">
-                                <p class="text-[10px] text-slate-500 mt-1">12 digits (e.g. 12-345678901-2)</p>
+                                <input type="text" name="philhealth_no" placeholder="Enter PhilHealth Number" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-xs font-semibold focus:ring-2 focus:ring-blue-500 outline-none">
                             </div>
                         </div>
                     </div>
@@ -686,8 +947,8 @@ $todayDate = date('Y-m-d');
                                     <tr class="bg-slate-100 text-slate-700 uppercase font-black">
                                         <th class="p-3 rounded-l-xl">DOCUMENT NAME</th>
                                         <th class="p-3">DOCUMENT NO. <span class="text-red-600">*</span></th>
-                                        <th class="p-3">ISSUE DATE <span class="text-red-600">*</span></th>
-                                        <th class="p-3">EXPIRY DATE <span class="text-red-600">*</span></th>
+                                        <th class="p-3">ISSUE DATE</th>
+                                        <th class="p-3">EXPIRY DATE</th>
                                         <th class="p-3 rounded-r-xl">PLACE ISSUED <span class="text-red-600">*</span></th>
                                     </tr>
                                 </thead>
@@ -695,30 +956,35 @@ $todayDate = date('Y-m-d');
                                     <!-- Passport -->
                                     <tr>
                                         <td class="p-3 font-bold text-slate-900">PASSPORT</td>
-                                        <td class="p-2"><input type="text" name="passport_no" required placeholder="Passport No." class="w-full p-2 border border-slate-300 rounded-lg" oninput="checkPassportCompleteness()" onchange="checkPassportCompleteness()"></td>
-                                        <td class="p-2"><input type="date" name="passport_issue" id="passportIssue" required max="<?php echo $todayDate; ?>" class="w-full p-2 border border-slate-300 rounded-lg" oninput="checkPassportCompleteness()" onchange="checkPassportCompleteness()"></td>
-                                        <td class="p-2"><input type="date" name="passport_expiry" id="passportExpiry" required class="w-full p-2 border border-slate-300 rounded-lg" oninput="checkPassportCompleteness()" onchange="checkPassportCompleteness()"></td>
-                                        <td class="p-2"><input type="text" name="passport_place" required placeholder="Place Issued" class="w-full p-2 border border-slate-300 rounded-lg" oninput="checkPassportCompleteness()" onchange="checkPassportCompleteness()"></td>
+                                        <td class="p-2"><input type="text" name="passport_no" required placeholder="Passport No." oninput="forceUppercase(this)" autocapitalize="characters" class="w-full p-2 border border-slate-300 rounded-lg uppercase"></td>
+                                        <td class="p-2"><input type="date" name="passport_issue" max="<?php echo $todayDate; ?>" class="w-full p-2 border border-slate-300 rounded-lg"></td>
+                                        <td class="p-2">
+                                            <input type="date" name="passport_expiry" id="passport_expiry" class="w-full p-2 border border-slate-300 rounded-lg">
+                                        </td>
+                                        <td class="p-2"><input type="text" name="passport_place" required placeholder="Place Issued" class="w-full p-2 border border-slate-300 rounded-lg"></td>
                                     </tr>
-                                    <tr><td colspan="5" class="px-3 py-0"><p id="passportDateError" class="text-red-600 text-xs font-semibold hidden"></p></td></tr>
                                     <!-- Seaman's Book -->
                                     <tr>
                                         <td class="p-3 font-bold text-slate-900">SEAMAN'S BOOK</td>
-                                        <td class="p-2"><input type="text" name="sirb_no" required placeholder="SIRB / SID No." class="w-full p-2 border border-slate-300 rounded-lg" oninput="checkSirbCompleteness()" onchange="checkSirbCompleteness()"></td>
-                                        <td class="p-2"><input type="date" name="sirb_issue" id="sirbIssue" required max="<?php echo $todayDate; ?>" class="w-full p-2 border border-slate-300 rounded-lg" oninput="checkSirbCompleteness()" onchange="checkSirbCompleteness()"></td>
-                                        <td class="p-2"><input type="date" name="sirb_expiry" id="sirbExpiry" required class="w-full p-2 border border-slate-300 rounded-lg" oninput="checkSirbCompleteness()" onchange="checkSirbCompleteness()"></td>
-                                        <td class="p-2"><input type="text" name="sirb_place" required placeholder="Place Issued" class="w-full p-2 border border-slate-300 rounded-lg" oninput="checkSirbCompleteness()" onchange="checkSirbCompleteness()"></td>
+                                        <td class="p-2"><input type="text" name="sirb_no" required placeholder="SIRB / SID No." oninput="forceUppercase(this)" autocapitalize="characters" class="w-full p-2 border border-slate-300 rounded-lg uppercase"></td>
+                                        <td class="p-2"><input type="date" name="sirb_issue" max="<?php echo $todayDate; ?>" class="w-full p-2 border border-slate-300 rounded-lg"></td>
+                                        <td class="p-2">
+                                            <input type="date" name="sirb_expiry" id="sirb_expiry" class="w-full p-2 border border-slate-300 rounded-lg">
+                                        </td>
+                                        <td class="p-2"><input type="text" name="sirb_place" required placeholder="Place Issued" class="w-full p-2 border border-slate-300 rounded-lg"></td>
                                     </tr>
-                                    <tr><td colspan="5" class="px-3 py-0"><p id="sirbDateError" class="text-red-600 text-xs font-semibold hidden"></p></td></tr>
                                     <!-- GOC License -->
                                     <tr>
                                         <td class="p-3 font-bold text-slate-900">GOC LICENSE</td>
-                                        <td class="p-2"><input type="text" name="goc_no" placeholder="GOC License No." class="w-full p-2 border border-slate-300 rounded-lg" oninput="checkGocCompleteness()" onchange="checkGocCompleteness()"></td>
-                                        <td class="p-2"><input type="date" name="goc_issue" id="gocIssue" max="<?php echo $todayDate; ?>" class="w-full p-2 border border-slate-300 rounded-lg" oninput="checkGocCompleteness()" onchange="checkGocCompleteness()"></td>
-                                        <td class="p-2"><input type="date" name="goc_expiry" id="gocExpiry" class="w-full p-2 border border-slate-300 rounded-lg" oninput="checkGocCompleteness()" onchange="checkGocCompleteness()"></td>
-                                        <td class="p-2"><input type="text" name="goc_place" placeholder="Place Issued" class="w-full p-2 border border-slate-300 rounded-lg" oninput="checkGocCompleteness()" onchange="checkGocCompleteness()"></td>
+                                        <td class="p-2"><input type="text" name="goc_no" placeholder="GOC License No." class="w-full p-2 border border-slate-300 rounded-lg"></td>
+                                        <td class="p-2"><input type="date" name="goc_issue" max="<?php echo $todayDate; ?>" class="w-full p-2 border border-slate-300 rounded-lg"></td>
+                                        <td class="p-2">
+                                            <input type="date" name="goc_expiry" id="goc_expiry" class="w-full p-2 border border-slate-300 rounded-lg">
+                                            
+                                        </td>
+                                        <td class="p-2"><input type="text" name="goc_place" placeholder="Place Issued" class="w-full p-2 border border-slate-300 rounded-lg"></td>
                                     </tr>
-                                    <tr><td colspan="5" class="px-3 py-0"><p id="gocDateError" class="text-red-600 text-xs font-semibold hidden"></p></td></tr>
+                                    
                                 </tbody>
                             </table>
                         </div>
@@ -732,7 +998,7 @@ $todayDate = date('Y-m-d');
                         <div class="grid grid-cols-1 sm:grid-cols-4 gap-4">
                             <div>
                                 <label class="block text-xs font-bold text-slate-700 uppercase mb-1">LICENSE TYPE</label>
-                                <select name="coc_type" onchange="checkCocCompleteness()" class="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white text-xs">
+                                <select name="coc_type" class="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white text-xs">
                                     <option value="">Choose...</option>
                                     <option value="Master Mariner">Master Mariner</option>
                                     <option value="Chief Mate">Chief Mate</option>
@@ -745,18 +1011,21 @@ $todayDate = date('Y-m-d');
                             </div>
                             <div>
                                 <label class="block text-xs font-bold text-slate-700 uppercase mb-1">NO.</label>
-                                <input type="text" name="coc_no" placeholder="COC / License No." oninput="checkCocCompleteness()" onchange="checkCocCompleteness()" class="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs">
+                                <input type="text" name="coc_no" placeholder="COC / License No." class="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs">
                             </div>
                             <div>
                                 <label class="block text-xs font-bold text-slate-700 uppercase mb-1">ISSUE DATE</label>
-                                <input type="date" name="coc_issue" id="cocIssue" max="<?php echo $todayDate; ?>" oninput="checkCocCompleteness()" onchange="checkCocCompleteness()" class="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs">
+                                <input type="date" name="coc_issue" max="<?php echo $todayDate; ?>" class="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs">
                             </div>
                             <div>
                                 <label class="block text-xs font-bold text-slate-700 uppercase mb-1">EXPIRY DATE</label>
-                                <input type="date" name="coc_expiry" id="cocExpiry" oninput="checkCocCompleteness()" onchange="checkCocCompleteness()" class="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs">
+                                <input type="date" name="coc_expiry" id="coc_expiry" class="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs">
+                                <label class="flex items-center gap-1 mt-1 text-[11px] font-semibold text-slate-500 cursor-pointer select-none">
+                                    <input type="checkbox" name="coc_no_expiry" onchange="toggleNoExpiry(this, 'coc_expiry')" class="accent-blue-600">
+                                    No Expiry
+                                </label>
                             </div>
                         </div>
-                        <p id="cocDateError" class="text-red-600 text-xs font-semibold mt-2 hidden"></p>
                     </div>
 
                     <!-- E-Registration -->
@@ -784,20 +1053,32 @@ $todayDate = date('Y-m-d');
                             </h3>
                         </div>
                         <div id="trainingContainer" class="space-y-3">
-                            <div class="training-row grid grid-cols-1 sm:grid-cols-4 gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200">
-                                <input type="text" name="training_name[]" placeholder="Certificate Name (e.g. BST, ECDIS)" oninput="validateTrainingDates(this)" onchange="validateTrainingDates(this)" class="px-3 py-2 rounded-lg border border-slate-300 text-xs">
-                                <input type="text" name="training_no[]" placeholder="Certificate No." oninput="validateTrainingDates(this)" onchange="validateTrainingDates(this)" class="px-3 py-2 rounded-lg border border-slate-300 text-xs">
-                                <input type="date" name="training_issue[]" max="<?php echo $todayDate; ?>" class="px-3 py-2 rounded-lg border border-slate-300 text-xs training-issue" oninput="validateTrainingDates(this)" onchange="validateTrainingDates(this)">
-                                <input type="date" name="training_expiry[]" class="px-3 py-2 rounded-lg border border-slate-300 text-xs training-expiry" oninput="validateTrainingDates(this)" onchange="validateTrainingDates(this)">
+                            <div class="grid grid-cols-1 sm:grid-cols-4 gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200">
+                                <input type="text" name="training_name[]" placeholder="Certificate Name (e.g. BST, ECDIS)" class="px-3 py-2 rounded-lg border border-slate-300 text-xs">
+                                <input type="text" name="training_no[]" placeholder="Certificate No." class="px-3 py-2 rounded-lg border border-slate-300 text-xs">
+                                <input type="date" name="training_issue[]" max="<?php echo $todayDate; ?>" class="px-3 py-2 rounded-lg border border-slate-300 text-xs">
+                                <div>
+                                    <input type="date" name="training_expiry[]" class="w-full px-3 py-2 rounded-lg border border-slate-300 text-xs">
+                                    <label class="flex items-center gap-1 mt-1 text-[11px] font-semibold text-slate-500 cursor-pointer select-none">
+                                        <input type="checkbox" name="training_no_expiry[]" onchange="toggleTrainingNoExpiry(this)" class="accent-blue-600">
+                                        No Expiry
+                                    </label>
+                                </div>
                             </div>
-                            <p class="training-date-error text-red-600 text-xs font-semibold hidden"></p>
                         </div>
+                        <div class="flex items-center justify-end gap-3 pt-2">
+                            <p id="training_limit_msg" class="text-red-600 text-xs font-semibold hidden">
+                                Maximum of 5 certificates reached.
+                            </p>
 
-                        <div class="flex items-center justify-between">
-                            <button type="button" onclick="addTrainingRow()" id="addTrainingBtn" class="bg-blue-600 text-white font-bold text-xs px-4 py-1.5 rounded-lg hover:bg-blue-700">
+                            <button
+                                type="button"
+                                onclick="addTrainingRow()"
+                                id="addTrainingBtn"
+                                class="bg-blue-600 text-white font-bold text-xs px-5 py-2 rounded-lg hover:bg-blue-700 transition-all shadow-md"
+                            >
                                 + ADD CERTIFICATE
                             </button>
-                            <p id="training_limit_msg" class="text-red-600 text-xs font-semibold hidden">Maximum of 5 certificates reached.</p>
                         </div>
                     </div>
 
@@ -831,51 +1112,27 @@ $todayDate = date('Y-m-d');
                 <!-- Main Form Container -->
                 <div class="bg-white/95 backdrop-blur-md rounded-3xl p-6 sm:p-8 shadow-2xl border border-white/60 space-y-8 text-slate-800">
                     
-                    <!-- Cadet / First-Timer Toggle -->
-                    <div class="bg-blue-50 border border-blue-200 rounded-2xl p-4 flex items-start sm:items-center justify-between gap-4">
-                        <div class="flex items-center gap-3">
-                            <input type="checkbox" id="cadetToggle" class="w-5 h-5 rounded border-blue-300 text-blue-600 focus:ring-blue-500 cursor-pointer accent-blue-600 shrink-0" onchange="toggleCadetMode(this.checked)">
-                            <div>
-                                <label for="cadetToggle" class="text-xs sm:text-sm font-bold text-blue-950 cursor-pointer select-none">
-                                    I am a First-Time Applicant / Cadet with No Prior Sea Experience
-                                </label>
-                                <p class="text-[11px] text-blue-700">Check this if you are a fresh maritime academy graduate applying for your first vessel assignment.</p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Sea Experience Section -->
-                    <div id="experienceSection" class="space-y-4">
-                        <div class="flex items-center justify-between border-b border-slate-200 pb-2">
+                    <div class="space-y-4">
+                        <div class="border-b border-slate-200 pb-2">
                             <h3 class="font-black text-slate-900 text-sm uppercase tracking-wider border-l-4 border-slate-900 pl-3">
-                                SEA SERVICE RECORDS
+                                EXPERIENCES
                             </h3>
-                            <button type="button" onclick="addExperienceRow()" id="addExpBtn" class="bg-blue-600 text-white font-bold text-xs px-4 py-1.5 rounded-lg hover:bg-blue-700 shadow-sm">
-                                + ADD EXPERIENCE
-                            </button>
                         </div>
-                        <p id="experienceError" class="hidden text-red-600 text-xs font-semibold mt-2 bg-red-50 p-2.5 rounded-xl border border-red-200">
-                            &#9888; Please complete the required fields (Vessel Name, Rank, Date From) before adding another record.
-                        </p>
+                    <p id="experienceError" class="hidden text-red-600 text-xs font-semibold mt-2">
+                        Please fill out all fields in the current Experience before adding a new one.
+                    </p>
                         <div id="experienceContainer" class="space-y-6">
                             <!-- Experience Entry #1 -->
-                            <div class="experience-card bg-slate-50 p-5 rounded-2xl border border-slate-200 space-y-4">
-                                <div class="flex items-center justify-between">
-                                    <p class="text-xs font-black text-blue-700 uppercase exp-title">
-                                        EXPERIENCE #1 <span class="text-red-600 exp-required-mark">*</span>
-                                    </p>
-                                    <button type="button" onclick="clearOrRemoveFirstExp(this)" class="text-slate-400 hover:text-red-600 text-xs font-bold transition-colors">
-                                        &#x2715; Clear
-                                    </button>
-                                </div>
+                            <div class="bg-slate-50 p-5 rounded-2xl border border-slate-200 space-y-4">
+                                <p class="text-xs font-black text-blue-700 uppercase">EXPERIENCE #1 <span class="text-red-600">*</span> </p>
                                 <div class="grid grid-cols-1 sm:grid-cols-4 gap-4 text-xs">
                                     <div>
                                         <label class="block font-bold text-slate-700 mb-1">PRINCIPAL NAME</label>
                                         <input type="text" name="principal_name[]" placeholder="e.g. Evergreen Marine" class="w-full p-2.5 rounded-xl border border-slate-300">
                                     </div>
                                     <div>
-                                        <label class="block font-bold text-slate-700 mb-1">VESSEL NAME <span class="text-red-600 exp-required-mark">*</span></label>
-                                        <input type="text" name="vessel_name[]" placeholder="e.g. M/V Crystal Grace" class="w-full p-2.5 rounded-xl border border-slate-300 exp-req">
+                                        <label class="block font-bold text-slate-700 mb-1">VESSEL NAME <span class="text-red-600">*</span></label>
+                                        <input type="text" name="vessel_name[]" required placeholder="e.g. M/V Crystal Grace" class="w-full p-2.5 rounded-xl border border-slate-300">
                                     </div>
                                     <div>
                                         <label class="block font-bold text-slate-700 mb-1">FLAG</label>
@@ -885,41 +1142,55 @@ $todayDate = date('Y-m-d');
                                         <label class="block font-bold text-slate-700 mb-1">NATIONALITY</label>
                                         <input type="text" name="vessel_nat[]" placeholder="e.g. Japanese" class="w-full p-2.5 rounded-xl border border-slate-300">
                                     </div>
+
                                     <div>
                                         <label class="block font-bold text-slate-700 mb-1">MANNING AGENCY</label>
                                         <input type="text" name="manning_agency[]" placeholder="Agency Name" class="w-full p-2.5 rounded-xl border border-slate-300">
                                     </div>
                                     <div>
-                                        <label class="block font-bold text-slate-700 mb-1">RANK <span class="text-red-600 exp-required-mark">*</span></label>
-                                        <input type="text" name="exp_rank[]" placeholder="Rank Onboard" class="w-full p-2.5 rounded-xl border border-slate-300 exp-req">
+                                        <label class="block font-bold text-slate-700 mb-1">RANK</label>
+                                        <input type="text" name="exp_rank[]" placeholder="Rank Onboard" class="w-full p-2.5 rounded-xl border border-slate-300">
                                     </div>
                                     <div>
                                         <label class="block font-bold text-slate-700 mb-1">VESSEL TYPE</label>
-                                        <input type="text" name="vessel_type[]" placeholder="Container / Bulk Carrier" class="w-full p-2.5 rounded-xl border border-slate-300">
+                                        <input type="text" name="vessel_type[]" placeholder="Container / Tanker" class="w-full p-2.5 rounded-xl border border-slate-300">
                                     </div>
                                     <div>
                                         <label class="block font-bold text-slate-700 mb-1">GRT</label>
                                         <input type="text" name="vessel_grt[]" placeholder="Gross Tonnage" class="w-full p-2.5 rounded-xl border border-slate-300">
                                     </div>
+
                                     <div>
                                         <label class="block font-bold text-slate-700 mb-1">KW/BHP</label>
-                                        <input type="text" name="engine_power[]" placeholder="Engine Output" class="w-full p-2.5 rounded-xl border border-slate-300">
+                                        <input type="text" name="engine_power[]" placeholder="Engine Power" class="w-full p-2.5 rounded-xl border border-slate-300">
                                     </div>
                                     <div>
                                         <label class="block font-bold text-slate-700 mb-1">SALARY (USD)</label>
                                         <input type="text" name="salary[]" placeholder="Monthly Salary" class="w-full p-2.5 rounded-xl border border-slate-300">
                                     </div>
                                     <div>
-                                        <label class="block font-bold text-slate-700 mb-1">DATE FROM <span class="text-red-600 exp-required-mark">*</span></label>
-                                        <input type="date" name="date_from[]" class="w-full p-2.5 rounded-xl border border-slate-300 exp-req">
+                                        <label class="block font-bold text-slate-700 mb-1">DATE FROM</label>
+                                        <input type="date" name="date_from[]" max="<?php echo $todayDate; ?>" onchange="syncExperienceDateConstraints(this)" oninput="syncExperienceDateConstraints(this)" class="w-full p-2.5 rounded-xl border border-slate-300">
                                     </div>
                                     <div>
                                         <label class="block font-bold text-slate-700 mb-1">DATE TO</label>
-                                        <input type="date" name="date_to[]" class="w-full p-2.5 rounded-xl border border-slate-300">
+                                        <input type="date" name="date_to[]" min="<?php echo $todayDate; ?>" onchange="syncExperienceDateConstraints(this)" oninput="syncExperienceDateConstraints(this)" class="w-full p-2.5 rounded-xl border border-slate-300">
                                     </div>
                                 </div>
                             </div>
                         </div>
+                    </div>
+
+                    <!-- Add Experience Button - Lower Right -->
+                    <div class="flex items-center justify-end pt-2">
+                        <button
+                            type="button"
+                            onclick="addExperienceRow()"
+                            id="addExperienceBtn"
+                            class="bg-blue-600 text-white font-bold text-xs px-5 py-2 rounded-lg hover:bg-blue-700 transition-all shadow-md"
+                        >
+                            + ADD EXPERIENCE
+                        </button>
                     </div>
 
                     <!-- Additional Details -->
@@ -1020,11 +1291,19 @@ $todayDate = date('Y-m-d');
                 </div>
 
                 <div class="bg-slate-50 p-6 rounded-2xl border border-slate-200 text-left text-xs space-y-2 font-medium">
-                    <p class="font-bold text-slate-900 border-b pb-2 text-sm uppercase">Applicant Overview</p>
+                    <p class="font-bold text-slate-900 border-b pb-2 text-sm uppercase flex items-center justify-between">
+                        <span>Applicant Overview</span>
+                        <?php if (!empty($refNumber)): ?>
+                            <span class="text-blue-600 font-extrabold tracking-wider"><?php echo htmlspecialchars($refNumber); ?></span>
+                        <?php endif; ?>
+                    </p>
+                    <?php if (!empty($refNumber)): ?>
+                        <p><strong>Reference Number:</strong> <span class="font-bold text-blue-600"><?php echo htmlspecialchars($refNumber); ?></span></p>
+                    <?php endif; ?>
                     <p><strong>Position Applied:</strong> <?php echo htmlspecialchars($appData['position_applied'] ?? 'N/A'); ?></p>
                     <p><strong>Full Name:</strong> <?php echo htmlspecialchars(($appData['first_name'] ?? '') . ' ' . ($appData['middle_name'] ?? '') . ' ' . ($appData['last_name'] ?? '')); ?></p>
                     <p><strong>Email Address:</strong> <?php echo htmlspecialchars($appData['email'] ?? 'N/A'); ?></p>
-                    <p><strong>Contact Number:</strong> <?php echo htmlspecialchars($appData['phone'] ?? 'N/A'); ?></p>
+                    <p><strong>Contact Number:</strong> <?php $countryCode = $appData['country_code'] ?? ''; $phone = $appData['phone'] ?? 'N/A'; echo htmlspecialchars(trim($countryCode . ' ' . $phone)); ?> </p>
                     <p><strong>Submission Time:</strong> <?php echo $submittedAt; ?></p>
                 </div>
 
@@ -1058,13 +1337,153 @@ $todayDate = date('Y-m-d');
         </div>
     </div>
 
+    <!-- Remove Confirmation Modal -->
+    <div
+        id="removeConfirmModal"
+        class="hidden fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm"
+    >
+        <div class="bg-white rounded-3xl shadow-2xl max-w-md w-full p-6 sm:p-8 text-center space-y-5">
+
+            <!-- Warning Icon -->
+            <div class="w-14 h-14 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto text-2xl font-black">
+                !
+            </div>
+
+            <!-- Message -->
+            <div>
+                <h3 class="text-lg sm:text-xl font-black text-slate-900">
+                    Remove this item?
+                </h3>
+
+                <p id="removeConfirmMessage" class="text-xs sm:text-sm text-slate-600 mt-2">
+                    Are you sure you want to remove this item?
+                </p>
+            </div>
+
+            <!-- Buttons -->
+            <div class="flex flex-col sm:flex-row gap-3 pt-2">
+
+                <button
+                    type="button"
+                    onclick="closeRemoveConfirmModal()"
+                    class="w-full py-3 px-6 rounded-full font-extrabold text-sm bg-slate-200 text-slate-800 hover:bg-slate-300 transition-all"
+                >
+                    CANCEL
+                </button>
+
+                <button
+                    type="button"
+                    onclick="confirmRemoveItem()"
+                    class="w-full py-3 px-6 rounded-full font-extrabold text-sm bg-red-600 text-white hover:bg-red-700 transition-all shadow-lg"
+                >
+                    YES, REMOVE
+                </button>
+
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Document Expiry Warning Modal -->
+    <div
+        id="expiryAlertModal"
+        class="hidden fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm"
+    >
+        <div class="bg-white rounded-3xl shadow-2xl max-w-md w-full p-6 sm:p-8 text-center space-y-5">
+
+            <!-- Warning Icon -->
+            <div id="expiryAlertIcon" class="w-14 h-14 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mx-auto text-2xl font-black">
+                ⚠
+            </div>
+
+            <!-- Message -->
+            <div>
+                <h3 id="expiryAlertTitle" class="text-lg sm:text-xl font-black text-slate-900">
+                    Document Near Expiry
+                </h3>
+
+                <div id="expiryAlertMessage" class="text-xs sm:text-sm text-slate-600 mt-3 text-left">
+                </div>
+            </div>
+
+            <!-- Button -->
+            <button
+                type="button"
+                onclick="closeExpiryAlert()"
+                class="w-full py-3 px-6 rounded-full font-extrabold text-sm bg-blue-600 text-white hover:bg-blue-700 transition-all shadow-lg"
+            >
+                OK, GOT IT
+            </button>
+
+        </div>
+    </div>
+
+    <!-- Scroll To Top Button -->
+
+    <button
+        type="button"
+        id="scrollTopBtn"
+        onclick="scrollToTop()"
+        class="hidden fixed bottom-6 right-6 z-50 w-20 h-20 rounded-full bg-blue-600 text-white text-5xl font-black shadow-xl hover:bg-blue-700 transition-all items-center justify-center"
+        aria-label="Scroll to top"
+    >
+        ↑
+    </button>
+
     <!-- Footer -->
     <footer class="py-4 text-center text-xs font-semibold text-white/80 border-t border-white/10 bg-slate-950/60 backdrop-blur-md">
-        © <?php echo date('Y'); ?> Crystal Shipping Inc. All Rights Reserved. | Seafarer IEAC Application Portal
+        © <?php echo date('Y'); ?> Crystal Shipping Inc. All Rights Reserved. | Seafarer Application Portal
     </footer>
 
     <!-- JavaScript Navigation & Dynamics -->
     <script>
+        const TODAY_DATE = '<?php echo $todayDate; ?>';
+
+        function showExperienceError(msg) {
+            const errorMsg = document.getElementById("experienceError");
+            if (errorMsg) {
+                errorMsg.textContent = msg;
+                errorMsg.classList.remove("hidden");
+            }
+        }
+
+        function syncExperienceDateConstraints(changedInput) {
+            const card = changedInput ? (changedInput.closest('.grid') || changedInput.closest('.space-y-4')) : null;
+            if (!card) return;
+            const dateFrom = card.querySelector('input[name="date_from[]"]');
+            const dateTo = card.querySelector('input[name="date_to[]"]');
+            if (!dateFrom || !dateTo) return;
+
+            const todayStr = TODAY_DATE || new Date().toISOString().split('T')[0];
+
+            // Cap Date From at Date To (if Date To is earlier than today), otherwise cap at today
+            const maxForFrom = (dateTo.value && dateTo.value < todayStr) ? dateTo.value : todayStr;
+            dateFrom.setAttribute('max', maxForFrom);
+            dateTo.setAttribute('max', todayStr);
+
+            // Date To cannot start before Date From
+            if (dateFrom.value) {
+                dateTo.setAttribute('min', dateFrom.value);
+            } else {
+                dateTo.removeAttribute('min');
+            }
+
+            // HTML5 custom validity messaging
+            if (dateFrom.value && dateFrom.value > todayStr) {
+                dateFrom.setCustomValidity('Future dates are not allowed. Date From cannot be in the future.');
+            } else {
+                dateFrom.setCustomValidity('');
+            }
+
+            if (dateTo.value && dateTo.value > todayStr) {
+                dateTo.setCustomValidity('Future dates are not allowed. Date To cannot be in the future.');
+            } else if (dateFrom.value && dateTo.value && dateTo.value < dateFrom.value) {
+                dateTo.setCustomValidity('Date To cannot be earlier than Date From.');
+            } else {
+                dateTo.setCustomValidity('');
+            }
+        }
+
         function toggleTermsBtn() {
             const check = document.getElementById('termsCheck');
             const btn = document.getElementById('proceedGuideBtn');
@@ -1075,1003 +1494,440 @@ $todayDate = date('Y-m-d');
             const select = document.getElementById('howKnownSelect');
             const referralField = document.getElementById('referralNameField');
             const othersField = document.getElementById('othersHowKnownField');
-            const referralInput = document.getElementById('referralNameInput');
-            const othersInput = document.getElementById('othersHowKnownInput');
 
-            if (!select || !referralField || !othersField) return;
+            referralField.classList.add('hidden');
+            othersField.classList.add('hidden');
 
             if (select.value === 'Referral / Recommendation') {
                 referralField.classList.remove('hidden');
-            } else {
-                referralField.classList.add('hidden');
-                if (referralInput) {
-                    referralInput.value = '';
-                }
-            }
-
-            if (select.value === 'Others') {
+            } else if (select.value === 'Others') {
                 othersField.classList.remove('hidden');
-            } else {
-                othersField.classList.add('hidden');
-                if (othersInput) {
-                    othersInput.value = '';
-                }
             }
         }
 
-        function toggleWifeNameField() {
-            const select = document.getElementById('civilStatusSelect');
-            const container = document.getElementById('wifeNameContainer');
-            const input = document.getElementById('wifeNameInput');
-            if (!select || !container) return;
-
-            if (select.value === 'Married') {
-                container.classList.remove('hidden');
-            } else {
-                container.classList.add('hidden');
-                if (input) {
-                    input.value = '';
-                    input.setCustomValidity('');
-                    input.classList.remove('border-red-500', 'bg-red-50');
-                }
-            }
-        }
-
-        function formatSss(input) {
-            if (!input) return;
-            var digits = input.value.replace(/\D/g, '').slice(0, 10);
-            var formatted = digits;
-            if (digits.length > 2 && digits.length <= 9) {
-                formatted = digits.slice(0, 2) + '-' + digits.slice(2);
-            } else if (digits.length > 9) {
-                formatted = digits.slice(0, 2) + '-' + digits.slice(2, 9) + '-' + digits.slice(9, 10);
-            }
-            input.value = formatted;
-        }
-
-        function formatPhilhealth(input) {
-            if (!input) return;
-            var digits = input.value.replace(/\D/g, '').slice(0, 12);
-            var formatted = digits;
-            if (digits.length > 2 && digits.length <= 11) {
-                formatted = digits.slice(0, 2) + '-' + digits.slice(2);
-            } else if (digits.length > 11) {
-                formatted = digits.slice(0, 2) + '-' + digits.slice(2, 11) + '-' + digits.slice(11, 12);
-            }
-            input.value = formatted;
-        }
-
-        function formatPagibig(input) {
-            if (!input) return;
-            var digits = input.value.replace(/\D/g, '').slice(0, 12);
-            var formatted = digits;
-            if (digits.length > 4 && digits.length <= 8) {
-                formatted = digits.slice(0, 4) + '-' + digits.slice(4);
-            } else if (digits.length > 8) {
-                formatted = digits.slice(0, 4) + '-' + digits.slice(4, 8) + '-' + digits.slice(8, 12);
-            }
-            input.value = formatted;
-        }
-
-        const stepOrder = ['terms', 'guide', 'personal', 'documents', 'shipboard', 'review'];
-        let isSubmitting = false;
+        // Order of steps used to calculate how full the header progress bar should be.
+        // "terms" is intentionally excluded — the bar stays empty until the user
+        // proceeds past Terms & Conditions, then starts counting from "guide" onward.
+        const stepOrder = ['guide', 'personal', 'documents', 'shipboard', 'review'];
 
         function updateHeaderProgress(stepId) {
             const bar = document.getElementById('headerProgressBar');
-            const badge = document.getElementById('headerStepBadge');
+            if (!bar) return;
 
-            const badgeMap = {
-                'terms': '<span class="w-2 h-2 rounded-full bg-slate-400"></span><span>Terms & Conditions</span>',
-                'guide': '<span class="w-2 h-2 rounded-full bg-blue-500"></span><span>Application Guide</span>',
-                'personal': '<span class="w-2 h-2 rounded-full bg-blue-600 animate-pulse"></span><span>Step 1 of 3: Personal Info</span>',
-                'documents': '<span class="w-2 h-2 rounded-full bg-blue-600 animate-pulse"></span><span>Step 2 of 3: Documents</span>',
-                'shipboard': '<span class="w-2 h-2 rounded-full bg-blue-600 animate-pulse"></span><span>Step 3 of 3: Shipboard</span>',
-                'review': '<span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span><span>Review & Confirm</span>',
-                'success': '<span class="w-2 h-2 rounded-full bg-emerald-500"></span><span>Submitted</span>'
-            };
-
-            if (badge && badgeMap[stepId]) {
-                badge.innerHTML = badgeMap[stepId];
+            if (stepId === 'terms') {
+                bar.style.width = '0%';
+                return;
             }
 
-            if (!bar) return;
-            if (stepId === 'terms') { bar.style.width = '0%'; return; }
-            if (stepId === 'success') { bar.style.width = '100%'; return; }
-            const wizardSteps = ['guide', 'personal', 'documents', 'shipboard', 'review'];
-            const idx = wizardSteps.indexOf(stepId);
-            if (idx === -1) { bar.style.width = '100%'; return; }
-            const pct = ((idx + 1) / wizardSteps.length) * 100;
+            const idx = stepOrder.indexOf(stepId);
+            if (idx === -1) {
+                // Not a wizard step (e.g. success page) — treat as fully complete
+                bar.style.width = '100%';
+                return;
+            }
+
+            const pct = ((idx + 1) / stepOrder.length) * 100;
             bar.style.width = pct + '%';
         }
 
-        function goToStep(stepId, pushHistory) {
-            if (pushHistory === undefined) pushHistory = true;
+        function goToStep(stepId) {
+            document.querySelectorAll('.step-page').forEach(el => el.classList.add('hidden'));
             const target = document.getElementById('step-' + stepId);
-            if (!target) return;
-            document.querySelectorAll('.step-page').forEach(function(el) { el.classList.add('hidden'); });
-            target.classList.remove('hidden');
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-            if (stepId === 'review') { showReviewTab('personal'); populateReview(); }
+            if (target) {
+                target.classList.remove('hidden');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+            if (stepId === 'review') {
+                showReviewTab('personal');
+                populateReview();
+            }
             updateHeaderProgress(stepId);
-            if (pushHistory && window.history) {
-                var newUrl = window.location.pathname + '?step=' + stepId;
-                window.history.pushState({ step: stepId }, '', newUrl);
-            }
-            if (typeof saveFormDraft === 'function') {
-                saveFormDraft();
-            }
         }
 
-        window.addEventListener('popstate', function(e) {
-            if (e.state && e.state.step) {
-                goToStep(e.state.step, false);
-            } else {
-                var params = new URLSearchParams(window.location.search);
-                var step = params.get('step') || 'terms';
-                goToStep(step, false);
-            }
-        });
-
-        // ==================== AUTO-SAVE & DRAFT RESTORATION ====================
-        var DRAFT_KEY = 'crystal_portal_draft';
-
-        function saveFormDraft() {
-            try {
-                var form = document.getElementById('seafarerForm');
-                if (!form) return;
-
-                var currentStepEl = document.querySelector('.step-page:not(.hidden)');
-                var currentStepId = currentStepEl ? currentStepEl.id.replace('step-', '') : 'terms';
-
-                var draft = {
-                    currentStep: currentStepId,
-                    termsChecked: document.getElementById('termsCheck') ? document.getElementById('termsCheck').checked : false,
-                    certifyChecked: document.getElementById('certifyCheck') ? document.getElementById('certifyCheck').checked : false,
-                    cadetToggle: document.getElementById('cadetToggle') ? document.getElementById('cadetToggle').checked : false,
-                    isCadet: document.getElementById('isCadetInput') ? document.getElementById('isCadetInput').value : '0',
-                    fields: {},
-                    trainingRows: [],
-                    experienceCards: []
-                };
-
-                // Scalar inputs - EXCLUDE sensitive fields entirely (never written to sessionStorage)
-                var sensitiveFields = ['photo_base64', 'pagibig_no', 'sss_no', 'philhealth_no'];
-                var inputs = form.querySelectorAll('input:not([name$="[]"]):not([type="checkbox"]):not([type="file"]), select:not([name$="[]"]), textarea:not([name$="[]"])');
-                inputs.forEach(function(inp) {
-                    if (inp.name && sensitiveFields.indexOf(inp.name) === -1) {
-                        draft.fields[inp.name] = inp.value;
-                    }
-                });
-
-                // Training rows
-                var tNames = form.querySelectorAll('input[name="training_name[]"]');
-                var tNos = form.querySelectorAll('input[name="training_no[]"]');
-                var tIssues = form.querySelectorAll('input[name="training_issue[]"]');
-                var tExpiries = form.querySelectorAll('input[name="training_expiry[]"]');
-                for (var i = 0; i < tNames.length; i++) {
-                    draft.trainingRows.push({
-                        name: tNames[i] ? tNames[i].value : '',
-                        no: tNos[i] ? tNos[i].value : '',
-                        issue: tIssues[i] ? tIssues[i].value : '',
-                        expiry: tExpiries[i] ? tExpiries[i].value : ''
-                    });
-                }
-
-                // Experience cards
-                var expCards = document.querySelectorAll('#experienceContainer > .experience-card');
-                expCards.forEach(function(card) {
-                    var expData = {};
-                    var cardInputs = card.querySelectorAll('input');
-                    cardInputs.forEach(function(inp) {
-                        var cleanName = inp.name.replace('[]', '');
-                        expData[cleanName] = inp.value;
-                    });
-                    draft.experienceCards.push(expData);
-                });
-
-                sessionStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
-            } catch (e) {
-                console.warn('Draft save error:', e);
-            }
-        }
-
-        function restoreFormDraft() {
-            try {
-                var raw = sessionStorage.getItem(DRAFT_KEY);
-                if (!raw) return;
-                var draft = JSON.parse(raw);
-                if (!draft) return;
-
-                var form = document.getElementById('seafarerForm');
-                if (!form) return;
-
-                // Restore scalar fields
-                if (draft.fields) {
-                    for (var name in draft.fields) {
-                        var el = form.elements[name];
-                        if (el && el.type !== 'file' && el.type !== 'checkbox') {
-                            el.value = draft.fields[name];
-                        }
-                    }
-                    if (draft.fields['dob'] && typeof calcAge === 'function') {
-                        calcAge();
-                    }
-                }
-
-                if (typeof toggleHowKnownFields === 'function') {
-                    toggleHowKnownFields();
-                }
-                if (typeof toggleWifeNameField === 'function') {
-                    toggleWifeNameField();
-                }
-
-                if (draft.termsChecked) {
-                    var tc = document.getElementById('termsCheck');
-                    if (tc) {
-                        tc.checked = true;
-                        if (typeof toggleTermsBtn === 'function') toggleTermsBtn();
-                    }
-                }
-
-                if (draft.certifyChecked) {
-                    var cc = document.getElementById('certifyCheck');
-                    if (cc) cc.checked = true;
-                }
-
-                // Restore Training Rows
-                if (draft.trainingRows && draft.trainingRows.length > 0) {
-                    var tNames = form.querySelectorAll('input[name="training_name[]"]');
-                    var tNos = form.querySelectorAll('input[name="training_no[]"]');
-                    var tIssues = form.querySelectorAll('input[name="training_issue[]"]');
-                    var tExpiries = form.querySelectorAll('input[name="training_expiry[]"]');
-
-                    if (tNames[0]) tNames[0].value = draft.trainingRows[0].name || '';
-                    if (tNos[0]) tNos[0].value = draft.trainingRows[0].no || '';
-                    if (tIssues[0]) tIssues[0].value = draft.trainingRows[0].issue || '';
-                    if (tExpiries[0]) tExpiries[0].value = draft.trainingRows[0].expiry || '';
-
-                    for (var t = 1; t < draft.trainingRows.length; t++) {
-                        if (typeof addTrainingRow === 'function') {
-                            addTrainingRow();
-                            var uNames = form.querySelectorAll('input[name="training_name[]"]');
-                            var uNos = form.querySelectorAll('input[name="training_no[]"]');
-                            var uIssues = form.querySelectorAll('input[name="training_issue[]"]');
-                            var uExpiries = form.querySelectorAll('input[name="training_expiry[]"]');
-                            if (uNames[t]) uNames[t].value = draft.trainingRows[t].name || '';
-                            if (uNos[t]) uNos[t].value = draft.trainingRows[t].no || '';
-                            if (uIssues[t]) uIssues[t].value = draft.trainingRows[t].issue || '';
-                            if (uExpiries[t]) uExpiries[t].value = draft.trainingRows[t].expiry || '';
-                        }
-                    }
-                }
-
-                // Restore Cadet Mode
-                if (draft.cadetToggle || draft.isCadet === '1') {
-                    var cadetCheck = document.getElementById('cadetToggle');
-                    if (cadetCheck) {
-                        cadetCheck.checked = true;
-                        if (typeof toggleCadetMode === 'function') toggleCadetMode(true);
-                    }
-                }
-
-                // Restore Experience Cards
-                if (draft.experienceCards && draft.experienceCards.length > 0 && draft.isCadet !== '1') {
-                    var firstCard = document.querySelector('#experienceContainer > .experience-card');
-                    if (firstCard && draft.experienceCards[0]) {
-                        for (var k in draft.experienceCards[0]) {
-                            var inp0 = firstCard.querySelector('input[name="' + k + '[]"]');
-                            if (inp0) inp0.value = draft.experienceCards[0][k];
-                        }
-                    }
-
-                    for (var x = 1; x < draft.experienceCards.length; x++) {
-                        if (typeof addExperienceRow === 'function') {
-                            addExperienceRow();
-                            var allCards = document.querySelectorAll('#experienceContainer > .experience-card');
-                            var targetCard = allCards[x];
-                            if (targetCard && draft.experienceCards[x]) {
-                                for (var k2 in draft.experienceCards[x]) {
-                                    var inpx = targetCard.querySelector('input[name="' + k2 + '[]"]');
-                                    if (inpx) inpx.value = draft.experienceCards[x][k2];
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // Restore Step View
-                var urlParams = new URLSearchParams(window.location.search);
-                var activeStep = urlParams.get('step') || draft.currentStep || 'terms';
-                if (activeStep && activeStep !== 'terms' && activeStep !== 'success') {
-                    goToStep(activeStep, false);
-                }
-
-                // Run completeness checks on restored document fields
-                if (typeof checkPassportCompleteness === 'function') checkPassportCompleteness();
-                if (typeof checkSirbCompleteness === 'function') checkSirbCompleteness();
-                if (typeof checkGocCompleteness === 'function') checkGocCompleteness();
-                if (typeof checkCocCompleteness === 'function') checkCocCompleteness();
-            } catch (e) {
-                console.warn('Draft restore error:', e);
-            }
-        }
-
-        function clearFormDraft() {
-            try {
-                sessionStorage.removeItem(DRAFT_KEY);
-            } catch (e) {}
-        }
-
-        function startNewApplicant() {
-            if (confirm('Start fresh for a new applicant? This will clear all entered data and return to Step 1.')) {
-                clearFormDraft();
-                var form = document.getElementById('seafarerForm');
-                if (form) form.reset();
-                window.location.href = 'index.php?step=terms';
-            }
-        }
-
+        // Set the initial progress bar fill based on whichever step is showing on page load
         document.addEventListener('DOMContentLoaded', function() {
-            var params = new URLSearchParams(window.location.search);
-            var initialStep = params.get('step') || 'terms';
-            if (initialStep === 'success') {
+            const visibleStep = document.querySelector('.step-page:not(.hidden)');
+            if (visibleStep) {
+                updateHeaderProgress(visibleStep.id.replace('step-', ''));
+            } else {
+                // No wizard step visible means we're on the success page
                 updateHeaderProgress('success');
-                return;
-            }
-            if (!document.getElementById('step-' + initialStep)) { initialStep = 'terms'; }
-            document.querySelectorAll('.step-page').forEach(function(el) { el.classList.add('hidden'); });
-            var startElement = document.getElementById('step-' + initialStep);
-            if (startElement) { startElement.classList.remove('hidden'); updateHeaderProgress(initialStep); }
-            if (window.history.state === null) {
-                window.history.replaceState({ step: initialStep }, '', window.location.href);
-            }
-            var posSelect = document.getElementById('positionApplied');
-            if (posSelect) {
-                posSelect.addEventListener('change', function() {
-                    if (this.value === 'Deck Cadet' || this.value === 'Engine Cadet') {
-                        var cadetCheck = document.getElementById('cadetToggle');
-                        if (cadetCheck && !cadetCheck.checked) {
-                            cadetCheck.checked = true;
-                            toggleCadetMode(true);
-                        }
-                    }
-                    if (typeof saveFormDraft === 'function') saveFormDraft();
-                });
             }
 
-            var seafarerForm = document.getElementById('seafarerForm');
-            if (seafarerForm) {
-                seafarerForm.addEventListener('input', saveFormDraft);
-                seafarerForm.addEventListener('change', saveFormDraft);
-            }
-
-            restoreFormDraft();
-            toggleWifeNameField();
-            toggleHowKnownFields();
+            // Initialize experience date pickers with max constraint and event listeners
+            document.querySelectorAll('#experienceContainer input[name="date_from[]"], #experienceContainer input[name="date_to[]"]').forEach(input => {
+                input.setAttribute('max', TODAY_DATE);
+                input.addEventListener('change', function() { syncExperienceDateConstraints(this); });
+                input.addEventListener('input', function() { syncExperienceDateConstraints(this); });
+                syncExperienceDateConstraints(input);
+            });
         });
-
-        function toggleCadetMode(isCadet) {
-            var expSection = document.getElementById('experienceSection');
-            var isCadetField = document.getElementById('isCadetInput');
-            var expReqMarks = document.querySelectorAll('.exp-required-mark');
-            var expReqInputs = document.querySelectorAll('.exp-req');
-            var errorMsg = document.getElementById('experienceError');
-            isCadetField.value = isCadet ? '1' : '0';
-            if (isCadet) {
-                expSection.classList.add('opacity-50', 'pointer-events-none');
-                expReqMarks.forEach(function(el) { el.classList.add('hidden'); });
-                expReqInputs.forEach(function(el) { el.required = false; el.setCustomValidity(''); });
-                if (errorMsg) errorMsg.classList.add('hidden');
-            } else {
-                expSection.classList.remove('opacity-50', 'pointer-events-none');
-                expReqMarks.forEach(function(el) { el.classList.remove('hidden'); });
-                expReqInputs.forEach(function(el) { el.required = true; });
-            }
-        }
-
-        function validateDatePair(issueInput, expiryInput, docLabel, errorEl) {
-            var issueVal = issueInput ? issueInput.value : '';
-            var expiryVal = expiryInput ? expiryInput.value : '';
-            var today = new Date();
-            today.setHours(0, 0, 0, 0);
-            [issueInput, expiryInput].forEach(function(inp) {
-                if (!inp) return;
-                inp.classList.remove('border-red-500', 'bg-red-50', 'border-amber-500', 'bg-amber-50');
-                inp.setCustomValidity('');
-            });
-            if (errorEl) {
-                errorEl.classList.add('hidden');
-                errorEl.classList.remove('text-amber-600', 'text-red-600');
-                errorEl.textContent = '';
-            }
-            if (issueVal) {
-                var issueDate = new Date(issueVal);
-                if (issueDate > today) {
-                    var msg = docLabel + ': Issue date cannot be in the future.';
-                    if (issueInput) { issueInput.classList.add('border-red-500', 'bg-red-50'); issueInput.setCustomValidity(msg); }
-                    if (errorEl) {
-                        errorEl.classList.add('text-red-600');
-                        errorEl.textContent = '\u26A0 ' + msg;
-                        errorEl.classList.remove('hidden');
-                    }
-                    return false;
-                }
-            }
-            if (issueVal && expiryVal) {
-                var issueDateC = new Date(issueVal);
-                var expiryDate = new Date(expiryVal);
-                if (expiryDate <= issueDateC) {
-                    var msg2 = docLabel + ': Expiry date must be later than the issue date.';
-                    if (expiryInput) { expiryInput.classList.add('border-red-500', 'bg-red-50'); expiryInput.setCustomValidity(msg2); }
-                    if (errorEl) {
-                        errorEl.classList.add('text-red-600');
-                        errorEl.textContent = '\u26A0 ' + msg2;
-                        errorEl.classList.remove('hidden');
-                    }
-                    return false;
-                }
-            }
-            if (expiryVal) {
-                var expiryDateW = new Date(expiryVal);
-                if (expiryDateW < today) {
-                    if (expiryInput) { expiryInput.classList.add('border-amber-500', 'bg-amber-50'); }
-                    if (errorEl) {
-                        errorEl.classList.add('text-amber-600');
-                        errorEl.textContent = '\u26A0 ' + docLabel + ': Document is expired. You may proceed; renewal will be required prior to deployment.';
-                        errorEl.classList.remove('hidden');
-                    }
-                }
-            }
-            return true;
-        }
-
-        function checkPassportCompleteness(forceCheck) {
-            var pNo = document.querySelector('input[name="passport_no"]');
-            var pIssue = document.getElementById('passportIssue');
-            var pExpiry = document.getElementById('passportExpiry');
-            var pPlace = document.querySelector('input[name="passport_place"]');
-            var pErr = document.getElementById('passportDateError');
-            if (!pNo || !pIssue || !pExpiry || !pPlace) return true;
-
-            var noVal = pNo.value.trim();
-            var issueVal = pIssue.value;
-            var expiryVal = pExpiry.value;
-            var placeVal = pPlace.value.trim();
-
-            var hasAny = (noVal !== '' || issueVal !== '' || expiryVal !== '' || placeVal !== '');
-
-            if (hasAny || forceCheck) {
-                var missing = [];
-                if (!noVal) { missing.push('Document No.'); pNo.classList.add('border-red-500', 'bg-red-50'); }
-                else { pNo.classList.remove('border-red-500', 'bg-red-50'); }
-
-                if (!issueVal) { missing.push('Issue Date'); pIssue.classList.add('border-red-500', 'bg-red-50'); }
-                else { pIssue.classList.remove('border-red-500', 'bg-red-50'); }
-
-                if (!expiryVal) { missing.push('Expiry Date'); pExpiry.classList.add('border-red-500', 'bg-red-50'); }
-                else { pExpiry.classList.remove('border-red-500', 'bg-red-50'); }
-
-                if (!placeVal) { missing.push('Place Issued'); pPlace.classList.add('border-red-500', 'bg-red-50'); }
-                else { pPlace.classList.remove('border-red-500', 'bg-red-50'); }
-
-                if (missing.length > 0) {
-                    if (pErr) {
-                        pErr.classList.remove('text-amber-600');
-                        pErr.classList.add('text-red-600');
-                        pErr.textContent = '\u26A0 Passport: Please complete all fields (' + missing.join(', ') + ').';
-                        pErr.classList.remove('hidden');
-                    }
-                    return false;
-                } else {
-                    return validateDatePair(pIssue, pExpiry, 'Passport', pErr);
-                }
-            } else {
-                if (pErr) {
-                    pErr.classList.add('hidden');
-                    pErr.classList.remove('text-amber-600', 'text-red-600');
-                    pErr.textContent = '';
-                }
-                [pNo, pIssue, pExpiry, pPlace].forEach(function(el) {
-                    el.classList.remove('border-red-500', 'bg-red-50', 'border-amber-500', 'bg-amber-50');
-                    el.setCustomValidity('');
-                });
-                return true;
-            }
-        }
-
-        function checkSirbCompleteness(forceCheck) {
-            var sNo = document.querySelector('input[name="sirb_no"]');
-            var sIssue = document.getElementById('sirbIssue');
-            var sExpiry = document.getElementById('sirbExpiry');
-            var sPlace = document.querySelector('input[name="sirb_place"]');
-            var sErr = document.getElementById('sirbDateError');
-            if (!sNo || !sIssue || !sExpiry || !sPlace) return true;
-
-            var noVal = sNo.value.trim();
-            var issueVal = sIssue.value;
-            var expiryVal = sExpiry.value;
-            var placeVal = sPlace.value.trim();
-
-            var hasAny = (noVal !== '' || issueVal !== '' || expiryVal !== '' || placeVal !== '');
-
-            if (hasAny || forceCheck) {
-                var missing = [];
-                if (!noVal) { missing.push('Document No.'); sNo.classList.add('border-red-500', 'bg-red-50'); }
-                else { sNo.classList.remove('border-red-500', 'bg-red-50'); }
-
-                if (!issueVal) { missing.push('Issue Date'); sIssue.classList.add('border-red-500', 'bg-red-50'); }
-                else { sIssue.classList.remove('border-red-500', 'bg-red-50'); }
-
-                if (!expiryVal) { missing.push('Expiry Date'); sExpiry.classList.add('border-red-500', 'bg-red-50'); }
-                else { sExpiry.classList.remove('border-red-500', 'bg-red-50'); }
-
-                if (!placeVal) { missing.push('Place Issued'); sPlace.classList.add('border-red-500', 'bg-red-50'); }
-                else { sPlace.classList.remove('border-red-500', 'bg-red-50'); }
-
-                if (missing.length > 0) {
-                    if (sErr) {
-                        sErr.classList.remove('text-amber-600');
-                        sErr.classList.add('text-red-600');
-                        sErr.textContent = '\u26A0 Seaman\'s Book: Please complete all fields (' + missing.join(', ') + ').';
-                        sErr.classList.remove('hidden');
-                    }
-                    return false;
-                } else {
-                    return validateDatePair(sIssue, sExpiry, 'Seaman\'s Book', sErr);
-                }
-            } else {
-                if (sErr) {
-                    sErr.classList.add('hidden');
-                    sErr.classList.remove('text-amber-600', 'text-red-600');
-                    sErr.textContent = '';
-                }
-                [sNo, sIssue, sExpiry, sPlace].forEach(function(el) {
-                    el.classList.remove('border-red-500', 'bg-red-50', 'border-amber-500', 'bg-amber-50');
-                    el.setCustomValidity('');
-                });
-                return true;
-            }
-        }
-
-        function checkGocCompleteness() {
-            var gocNo = document.querySelector('input[name="goc_no"]');
-            var gocIssue = document.getElementById('gocIssue');
-            var gocExpiry = document.getElementById('gocExpiry');
-            var gocPlace = document.querySelector('input[name="goc_place"]');
-            var gocErr = document.getElementById('gocDateError');
-            if (!gocNo || !gocIssue || !gocExpiry || !gocPlace) return true;
-
-            var noVal = gocNo.value.trim();
-            var issueVal = gocIssue.value;
-            var expiryVal = gocExpiry.value;
-            var placeVal = gocPlace.value.trim();
-
-            var hasAny = (noVal !== '' || issueVal !== '' || expiryVal !== '' || placeVal !== '');
-
-            if (hasAny) {
-                var missing = [];
-                if (!noVal) { missing.push('Document No.'); gocNo.classList.add('border-red-500', 'bg-red-50'); }
-                else { gocNo.classList.remove('border-red-500', 'bg-red-50'); }
-
-                if (!issueVal) { missing.push('Issue Date'); gocIssue.classList.add('border-red-500', 'bg-red-50'); }
-                else { gocIssue.classList.remove('border-red-500', 'bg-red-50'); }
-
-                if (!expiryVal) { missing.push('Expiry Date'); gocExpiry.classList.add('border-red-500', 'bg-red-50'); }
-                else { gocExpiry.classList.remove('border-red-500', 'bg-red-50'); }
-
-                if (!placeVal) { missing.push('Place Issued'); gocPlace.classList.add('border-red-500', 'bg-red-50'); }
-                else { gocPlace.classList.remove('border-red-500', 'bg-red-50'); }
-
-                if (missing.length > 0) {
-                    if (gocErr) {
-                        gocErr.classList.remove('text-amber-600');
-                        gocErr.classList.add('text-red-600');
-                        gocErr.textContent = '\u26A0 GOC License: Please complete all fields (' + missing.join(', ') + ').';
-                        gocErr.classList.remove('hidden');
-                    }
-                    return false;
-                } else {
-                    return validateDatePair(gocIssue, gocExpiry, 'GOC License', gocErr);
-                }
-            } else {
-                if (gocErr) {
-                    gocErr.classList.add('hidden');
-                    gocErr.classList.remove('text-amber-600', 'text-red-600');
-                    gocErr.textContent = '';
-                }
-                [gocNo, gocIssue, gocExpiry, gocPlace].forEach(function(el) {
-                    el.classList.remove('border-red-500', 'bg-red-50', 'border-amber-500', 'bg-amber-50');
-                    el.setCustomValidity('');
-                });
-                return true;
-            }
-        }
-
-        function checkCocCompleteness() {
-            var cocType = document.querySelector('select[name="coc_type"]');
-            var cocNo = document.querySelector('input[name="coc_no"]');
-            var cocIssue = document.getElementById('cocIssue');
-            var cocExpiry = document.getElementById('cocExpiry');
-            var cocErr = document.getElementById('cocDateError');
-            if (!cocType || !cocNo || !cocIssue || !cocExpiry) return true;
-
-            var typeVal = cocType.value.trim();
-            var noVal = cocNo.value.trim();
-            var issueVal = cocIssue.value;
-            var expiryVal = cocExpiry.value;
-
-            var hasAny = (typeVal !== '' || noVal !== '' || issueVal !== '' || expiryVal !== '');
-
-            if (hasAny) {
-                var missing = [];
-                if (!typeVal) { missing.push('License Type'); cocType.classList.add('border-red-500', 'bg-red-50'); }
-                else { cocType.classList.remove('border-red-500', 'bg-red-50'); }
-
-                if (!noVal) { missing.push('License No.'); cocNo.classList.add('border-red-500', 'bg-red-50'); }
-                else { cocNo.classList.remove('border-red-500', 'bg-red-50'); }
-
-                if (!issueVal) { missing.push('Issue Date'); cocIssue.classList.add('border-red-500', 'bg-red-50'); }
-                else { cocIssue.classList.remove('border-red-500', 'bg-red-50'); }
-
-                if (!expiryVal) { missing.push('Expiry Date'); cocExpiry.classList.add('border-red-500', 'bg-red-50'); }
-                else { cocExpiry.classList.remove('border-red-500', 'bg-red-50'); }
-
-                if (missing.length > 0) {
-                    if (cocErr) {
-                        cocErr.classList.remove('text-amber-600');
-                        cocErr.classList.add('text-red-600');
-                        cocErr.textContent = '\u26A0 COC / License: Please complete all fields (' + missing.join(', ') + ').';
-                        cocErr.classList.remove('hidden');
-                    }
-                    return false;
-                } else {
-                    return validateDatePair(cocIssue, cocExpiry, 'COC / License', cocErr);
-                }
-            } else {
-                if (cocErr) {
-                    cocErr.classList.add('hidden');
-                    cocErr.classList.remove('text-amber-600', 'text-red-600');
-                    cocErr.textContent = '';
-                }
-                [cocType, cocNo, cocIssue, cocExpiry].forEach(function(el) {
-                    el.classList.remove('border-red-500', 'bg-red-50', 'border-amber-500', 'bg-amber-50');
-                    el.setCustomValidity('');
-                });
-                return true;
-            }
-        }
-
-        function validateTrainingDates(changedInput) {
-            var row = changedInput ? changedInput.closest('.training-row') : null;
-            if (!row) return true;
-
-            var tName = row.querySelector('input[name="training_name[]"]');
-            var tNo = row.querySelector('input[name="training_no[]"]');
-            var tIssue = row.querySelector('.training-issue');
-            var tExpiry = row.querySelector('.training-expiry');
-            var tErr = null;
-            var tParent = row.parentElement;
-            if (tParent) tErr = tParent.querySelector('.training-date-error');
-            if (!tErr) tErr = row.nextElementSibling;
-            if (tErr && !tErr.classList.contains('training-date-error')) tErr = null;
-
-            var nameVal = tName ? tName.value.trim() : '';
-            var noVal = tNo ? tNo.value.trim() : '';
-            var issueVal = tIssue ? tIssue.value : '';
-            var expiryVal = tExpiry ? tExpiry.value : '';
-
-            var hasAny = (nameVal !== '' || noVal !== '' || issueVal !== '' || expiryVal !== '');
-
-            if (hasAny) {
-                var missing = [];
-                if (!nameVal) { missing.push('Certificate Name'); if (tName) tName.classList.add('border-red-500', 'bg-red-50'); }
-                else if (tName) { tName.classList.remove('border-red-500', 'bg-red-50'); }
-
-                if (!noVal) { missing.push('Certificate No.'); if (tNo) tNo.classList.add('border-red-500', 'bg-red-50'); }
-                else if (tNo) { tNo.classList.remove('border-red-500', 'bg-red-50'); }
-
-                if (!issueVal) { missing.push('Issue Date'); if (tIssue) tIssue.classList.add('border-red-500', 'bg-red-50'); }
-                else if (tIssue) { tIssue.classList.remove('border-red-500', 'bg-red-50'); }
-
-                if (!expiryVal) { missing.push('Expiry Date'); if (tExpiry) tExpiry.classList.add('border-red-500', 'bg-red-50'); }
-                else if (tExpiry) { tExpiry.classList.remove('border-red-500', 'bg-red-50'); }
-
-                var rowLabel = nameVal ? nameVal : 'Training Certificate';
-                if (missing.length > 0) {
-                    if (tErr) {
-                        tErr.classList.remove('text-amber-600');
-                        tErr.classList.add('text-red-600');
-                        tErr.textContent = '\u26A0 ' + rowLabel + ': Please complete all fields (' + missing.join(', ') + ').';
-                        tErr.classList.remove('hidden');
-                    }
-                    return false;
-                } else {
-                    return validateDatePair(tIssue, tExpiry, rowLabel, tErr);
-                }
-            } else {
-                if (tErr) {
-                    tErr.classList.add('hidden');
-                    tErr.classList.remove('text-amber-600', 'text-red-600');
-                    tErr.textContent = '';
-                }
-                [tName, tNo, tIssue, tExpiry].forEach(function(el) {
-                    if (el) { el.classList.remove('border-red-500', 'bg-red-50', 'border-amber-500', 'bg-amber-50'); el.setCustomValidity(''); }
-                });
-                return true;
-            }
-        }
-
-        function validateAllDocumentDates() {
-            var allValid = true;
-
-            // 1. Mandatory Passport
-            if (!checkPassportCompleteness(true)) {
-                if (allValid) {
-                    var pEl = document.getElementById('passportIssue') || document.querySelector('input[name="passport_no"]');
-                    if (pEl) pEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                }
-                allValid = false;
-            }
-
-            // 2. Mandatory Seaman's Book
-            if (!checkSirbCompleteness(true)) {
-                if (allValid) {
-                    var sEl = document.getElementById('sirbIssue') || document.querySelector('input[name="sirb_no"]');
-                    if (sEl) sEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                }
-                allValid = false;
-            }
-
-            // 3. Conditionally Mandatory GOC License
-            if (!checkGocCompleteness()) {
-                if (allValid) {
-                    var gocEl = document.getElementById('gocIssue') || document.querySelector('input[name="goc_no"]');
-                    if (gocEl) gocEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                }
-                allValid = false;
-            }
-
-            // 4. Conditionally Mandatory COC / License
-            if (!checkCocCompleteness()) {
-                if (allValid) {
-                    var cocEl = document.getElementById('cocIssue') || document.querySelector('input[name="coc_no"]');
-                    if (cocEl) cocEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                }
-                allValid = false;
-            }
-
-            // 5. Conditionally Mandatory Training Certificates (each row)
-            var trainingRows = document.querySelectorAll('.training-row');
-            trainingRows.forEach(function(row) {
-                var firstInp = row.querySelector('input');
-                if (!validateTrainingDates(firstInp)) {
-                    if (allValid) {
-                        var tIssue = row.querySelector('.training-issue') || firstInp;
-                        if (tIssue) tIssue.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    }
-                    allValid = false;
-                }
-            });
-
-            return allValid;
-        }
 
         function validateExperiences() {
-            var isCadet = document.getElementById('isCadetInput').value === '1';
-            if (isCadet) return true;
-            var experiences = document.querySelectorAll('#experienceContainer > .experience-card');
-            var errorMsg = document.getElementById('experienceError');
-            if (errorMsg) errorMsg.classList.add('hidden');
-            for (var i = 0; i < experiences.length; i++) {
-                var reqFields = experiences[i].querySelectorAll('.exp-req');
-                for (var j = 0; j < reqFields.length; j++) {
-                    if (reqFields[j].value.trim() === '') {
-                        if (errorMsg) errorMsg.classList.remove('hidden');
-                        reqFields[j].focus();
+            const experiences = document.querySelectorAll("#experienceContainer > div");
+            const errorMsg = document.getElementById("experienceError");
+            if (errorMsg) {
+                errorMsg.classList.add("hidden");
+                errorMsg.textContent = "Please fill out all fields in the current Experience before adding a new one.";
+            }
+
+            const todayStr = (typeof TODAY_DATE !== 'undefined' && TODAY_DATE) ? TODAY_DATE : new Date().toISOString().split('T')[0];
+
+            for (const experience of experiences) {
+                const fields = experience.querySelectorAll("input, select, textarea");
+                for (const field of fields) {
+                    if (field.value.trim() === "") {
+                        showExperienceError("Please fill out all fields in the current Experience before proceeding.");
+                        field.focus();
+                        return false;
+                    }
+                }
+
+                const dateFromInput = experience.querySelector('input[name="date_from[]"]');
+                const dateToInput = experience.querySelector('input[name="date_to[]"]');
+                if (dateFromInput && dateFromInput.value) {
+                    if (dateFromInput.value > todayStr) {
+                        showExperienceError("Future dates are not allowed. Date From cannot be in the future.");
+                        dateFromInput.focus();
+                        return false;
+                    }
+                }
+                if (dateToInput && dateToInput.value) {
+                    if (dateToInput.value > todayStr) {
+                        showExperienceError("Future dates are not allowed. Date To cannot be in the future.");
+                        dateToInput.focus();
+                        return false;
+                    }
+                }
+                if (dateFromInput && dateToInput && dateFromInput.value && dateToInput.value) {
+                    if (dateToInput.value < dateFromInput.value) {
+                        showExperienceError("Date To cannot be earlier than Date From.");
+                        dateToInput.focus();
                         return false;
                     }
                 }
             }
-            return validateDateRanges();
-        }
-
-        function validateDateRanges() {
-            var dateFromFields = document.querySelectorAll('input[name="date_from[]"]');
-            var dateToFields = document.querySelectorAll('input[name="date_to[]"]');
-            for (var i = 0; i < dateFromFields.length; i++) {
-                var from = dateFromFields[i].value;
-                var to = dateToFields[i] ? dateToFields[i].value : '';
-                if (from && to && new Date(to) < new Date(from)) {
-                    alert('Experience #' + (i + 1) + ': "Date To" cannot be earlier than "Date From".');
-                    dateToFields[i].focus();
-                    return false;
-                }
-            }
             return true;
         }
-
+        // Blocks navigation to the next step if any required (*) field on the
+        // CURRENT visible step is empty/invalid, or if age validation fails.
         function goToNextStep(nextStepId) {
-            var currentStep = document.querySelector('.step-page:not(.hidden)');
-            if (!currentStep) { goToStep(nextStepId); return; }
+            // Find the currently visible step only
+            const currentStep = document.querySelector('.step-page:not(.hidden)');
 
+            if (!currentStep) {
+                goToStep(nextStepId);
+                return;
+            }
+
+            // Check only inputs/selects/textareas inside the current step
+            const fields = currentStep.querySelectorAll(
+                'input, select, textarea'
+             );
+
+             for (const field of fields) {
+                if (!field.checkValidity()) {
+                    field.reportValidity();
+                    return;
+                }
+            }
+
+            // Leaving Shipboard?
+                if (nextStepId === "review") {
+
+                    if (!validateExperiences()) {
+                        return;
+                    }
+
+                }
+
+            // Leaving Documents? Check expiry dates now (once, on the way out)
+            // instead of interrupting the applicant while they're still typing.
+            // Expired or near-expiring documents only show a popup; the applicant
+            // can still proceed once they close it. It's shown again at submission.
             if (currentStep.id === 'step-documents') {
-                if (!validateAllDocumentDates()) return;
+                const { expired, nearExpiring } = collectExpiryWarnings();
+                const flagged = expired.concat(nearExpiring);
+                if (flagged.length > 0) {
+                    showExpiryWarnings(flagged, () => goToStep(nextStepId));
+                    return;
+                }
             }
 
-            var fields = currentStep.querySelectorAll('input:not([type="hidden"]):not([type="checkbox"]), select, textarea');
-            for (var i = 0; i < fields.length; i++) {
-                if (fields[i].offsetParent !== null && !fields[i].checkValidity()) {
-                    fields[i].reportValidity();
-                    return;
-                }
-            }
-            if (currentStep.id === 'step-shipboard') {
-                if (!validateExperiences()) return;
-                var certify = document.getElementById('certifyCheck');
-                if (certify && !certify.checked) {
-                    alert('Please certify that all information is correct before proceeding.');
-                    certify.focus();
-                    return;
-                }
-            }
+            // Current step is valid, so proceed
             goToStep(nextStepId);
         }
 
+        function calcAge() {
+            const dobInput = document.getElementById('dobInput');
+            const ageField = document.getElementById('ageField');
+            const dob = dobInput.value;
+
+            if (!dob) {
+                ageField.value = '';
+                dobInput.setCustomValidity('');
+                return;
+            }
+
+            const birthDate = new Date(dob);
+            const today = new Date();
+            let age = today.getFullYear() - birthDate.getFullYear();
+            const m = today.getMonth() - birthDate.getMonth();
+            if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+                age--;
+            }
+
+            if (age < 18) {
+                ageField.value = age >= 0 ? age + ' yrs old' : '';
+                ageField.classList.add('text-red-600', 'border-red-400', 'bg-red-50');
+                dobInput.setCustomValidity('Applicant must be at least 18 years old to apply.');
+            } else {
+                ageField.value = age + ' yrs old';
+                ageField.classList.remove('text-red-600', 'border-red-400', 'bg-red-50');
+                dobInput.setCustomValidity('');
+            }
+        }
+
         function previewPhoto(event) {
-            var input = event.target;
-            var file = input.files[0];
+            const input = event.target;
+            const file = input.files[0];
             if (!file) return;
+
+            const maxSizeBytes = 10 * 1024 * 1024; // 10MB
+
             if (!file.type.startsWith('image/')) {
-                alert('Please upload an image file only (JPG, PNG, WebP).');
+                alert('Please upload an image file only (JPG, PNG, etc.).');
                 input.value = '';
                 return;
             }
-            var reader = new FileReader();
+
+            if (file.size > maxSizeBytes) {
+                alert('Image is too large. Maximum file size is 10MB.');
+                input.value = '';
+                return;
+            }
+
+            const reader = new FileReader();
             reader.onload = function(e) {
-                var img = new Image();
-                img.onload = function() {
-                    var canvas = document.createElement('canvas');
-                    var MAX_DIM = 800;
-                    var width = img.width;
-                    var height = img.height;
-                    if (width > height && width > MAX_DIM) {
-                        height = Math.round((height * MAX_DIM) / width);
-                        width = MAX_DIM;
-                    } else if (height > MAX_DIM) {
-                        width = Math.round((width * MAX_DIM) / height);
-                        height = MAX_DIM;
-                    }
-                    canvas.width = width;
-                    canvas.height = height;
-                    var ctx = canvas.getContext('2d');
-                    ctx.drawImage(img, 0, 0, width, height);
-                    var compressedDataUrl = canvas.toDataURL('image/jpeg', 0.85);
-                    document.getElementById('photoBase64').value = compressedDataUrl;
-                    document.getElementById('photoPreview').innerHTML = '<img src="' + compressedDataUrl + '" class="w-24 h-24 object-cover rounded-xl shadow-md border-2 border-white mb-1"><span class="text-[10px] text-blue-600 font-bold">Change Photo</span>';
-                    if (typeof saveFormDraft === 'function') saveFormDraft();
-                };
-                img.src = e.target.result;
-            };
+                document.getElementById('photoPreview').innerHTML = `
+                    <img src="${e.target.result}" class="w-24 h-24 object-cover rounded-xl shadow-md border-2 border-white mb-1">
+                    <span class="text-[10px] text-blue-600 font-bold">Change Photo</span>
+                `;
+            }
             reader.readAsDataURL(file);
         }
 
-        var MAX_TRAINING_ROWS = 5;
+        const MAX_TRAINING_ROWS = 5;
 
-        function addTrainingRow() {
-            var container = document.getElementById('trainingContainer');
-            var rowCount = container.querySelectorAll('.training-row').length;
-            if (rowCount >= MAX_TRAINING_ROWS) {
-                document.getElementById('training_limit_msg').classList.remove('hidden');
-                document.getElementById('addTrainingBtn').disabled = true;
-                document.getElementById('addTrainingBtn').classList.add('opacity-50', 'cursor-not-allowed');
-                return;
+            function addTrainingRow() {
+                const container = document.getElementById('trainingContainer');
+                const rowCount = container.children.length;
+
+                if (rowCount >= MAX_TRAINING_ROWS) {
+                    document.getElementById('training_limit_msg').classList.remove('hidden');
+                    document.getElementById('addTrainingBtn').disabled = true;
+                    document.getElementById('addTrainingBtn').classList.add('opacity-50', 'cursor-not-allowed');
+                    return;
+                }
+
+                const div = document.createElement('div');
+                div.className = 'relative grid grid-cols-1 sm:grid-cols-4 gap-3 bg-slate-50 p-3 pt-7 rounded-xl border border-slate-200';
+                div.innerHTML = `
+                    <input type="text" name="training_name[]" placeholder="Certificate Name" class="px-3 py-2 rounded-lg border border-slate-300 text-xs">
+                    <input type="text" name="training_no[]" placeholder="Certificate No." class="px-3 py-2 rounded-lg border border-slate-300 text-xs">
+                    <input type="date" name="training_issue[]" max="${TODAY_DATE}" class="px-3 py-2 rounded-lg border border-slate-300 text-xs">
+                    <div>
+                        <input type="date" name="training_expiry[]" class="w-full px-3 py-2 rounded-lg border border-slate-300 text-xs">
+                        <label class="flex items-center gap-1 mt-1 text-[11px] font-semibold text-slate-500 cursor-pointer select-none">
+                            <input type="checkbox" name="training_no_expiry[]" onchange="toggleTrainingNoExpiry(this)" class="accent-blue-600">
+                            No Expiry
+                        </label>
+                    </div>
+                `;
+
+                // Add a remove button, positioned top-right of the row
+                const removeBtn = document.createElement('button');
+                removeBtn.type = 'button';
+                removeBtn.innerHTML = '✕ Remove';
+                removeBtn.className = 'absolute top-2 right-3 text-red-600 text-xs font-bold hover:underline';
+                removeBtn.onclick = function() { openRemoveConfirmModal(div, 'certificate'); };
+                div.appendChild(removeBtn);
+
+                container.appendChild(div);
+                checkTrainingLimit();
             }
-            var wrapper = document.createElement('div');
-            wrapper.className = 'training-row-wrapper';
-            var div = document.createElement('div');
-            div.className = 'training-row relative grid grid-cols-1 sm:grid-cols-4 gap-3 bg-slate-50 p-3 pt-7 rounded-xl border border-slate-200';
-            div.innerHTML = '<input type="text" name="training_name[]" placeholder="Certificate Name" oninput="validateTrainingDates(this)" onchange="validateTrainingDates(this)" class="px-3 py-2 rounded-lg border border-slate-300 text-xs">' +
-                '<input type="text" name="training_no[]" placeholder="Certificate No." oninput="validateTrainingDates(this)" onchange="validateTrainingDates(this)" class="px-3 py-2 rounded-lg border border-slate-300 text-xs">' +
-                '<input type="date" name="training_issue[]" class="px-3 py-2 rounded-lg border border-slate-300 text-xs training-issue" oninput="validateTrainingDates(this)" onchange="validateTrainingDates(this)">' +
-                '<input type="date" name="training_expiry[]" class="px-3 py-2 rounded-lg border border-slate-300 text-xs training-expiry" oninput="validateTrainingDates(this)" onchange="validateTrainingDates(this)">';
-            var errorP = document.createElement('p');
-            errorP.className = 'training-date-error text-red-600 text-xs font-semibold hidden';
-            var removeBtn = document.createElement('button');
-            removeBtn.type = 'button';
-            removeBtn.innerHTML = '\u2715 Remove';
-            removeBtn.className = 'absolute top-2 right-3 text-red-600 text-xs font-bold hover:underline';
-            removeBtn.onclick = function() {
-                if (confirm('Remove this certificate?')) { wrapper.remove(); checkTrainingLimit(); }
-            };
-            div.appendChild(removeBtn);
-            wrapper.appendChild(div);
-            wrapper.appendChild(errorP);
-            container.appendChild(wrapper);
-            checkTrainingLimit();
-        }
 
-        function checkTrainingLimit() {
-            var container = document.getElementById('trainingContainer');
-            var rowCount = container.querySelectorAll('.training-row').length;
-            var addBtn = document.getElementById('addTrainingBtn');
-            var limitMsg = document.getElementById('training_limit_msg');
-            if (rowCount >= MAX_TRAINING_ROWS) {
-                addBtn.disabled = true;
-                addBtn.classList.add('opacity-50', 'cursor-not-allowed');
-                limitMsg.classList.remove('hidden');
-            } else {
-                addBtn.disabled = false;
-                addBtn.classList.remove('opacity-50', 'cursor-not-allowed');
-                limitMsg.classList.add('hidden');
+            function checkTrainingLimit() {
+                const container = document.getElementById('trainingContainer');
+                const rowCount = container.children.length;
+                const addBtn = document.getElementById('addTrainingBtn');
+                const limitMsg = document.getElementById('training_limit_msg');
+
+                if (rowCount >= MAX_TRAINING_ROWS) {
+                    addBtn.disabled = true;
+                    addBtn.classList.add('opacity-50', 'cursor-not-allowed');
+                    limitMsg.classList.remove('hidden');
+                } else {
+                    addBtn.disabled = false;
+                    addBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                    limitMsg.classList.add('hidden');
+                }
             }
-        }
 
-        function addExperienceRow() {
-            var isCadet = document.getElementById('isCadetInput').value === '1';
-            if (isCadet) { alert('Cadet mode is active. Disable it to add sea service records.'); return; }
-            var container = document.getElementById('experienceContainer');
-            var lastExp = container.lastElementChild;
-            var errorMsg = document.getElementById('experienceError');
-            if (errorMsg) errorMsg.classList.add('hidden');
-            if (lastExp) {
-                var reqFields = lastExp.querySelectorAll('.exp-req');
-                for (var i = 0; i < reqFields.length; i++) {
-                    if (reqFields[i].value.trim() === '') {
-                        if (errorMsg) errorMsg.classList.remove('hidden');
-                        reqFields[i].focus();
+            function addExperienceRow() {
+                const container = document.getElementById('experienceContainer');
+                const errorMsg = document.getElementById("experienceError");
+                if (errorMsg) {
+                    errorMsg.classList.add("hidden");
+                    errorMsg.textContent = "Please fill out all fields in the current Experience before adding a new one.";
+                }
+
+                const lastExperience = container.lastElementChild;
+                if (lastExperience) {
+                    const fields = lastExperience.querySelectorAll("input, select, textarea");
+                    for (const field of fields) {
+                        if (field.value.trim() === "") {
+                            showExperienceError("Please fill out all fields in the current Experience before adding a new one.");
+                            field.focus();
+                            return;
+                        }
+                    }
+
+                    const dateFrom = lastExperience.querySelector('input[name="date_from[]"]');
+                    const dateTo = lastExperience.querySelector('input[name="date_to[]"]');
+                    const todayStr = (typeof TODAY_DATE !== 'undefined' && TODAY_DATE) ? TODAY_DATE : new Date().toISOString().split('T')[0];
+                    if (dateFrom && dateFrom.value > todayStr) {
+                        showExperienceError("Future dates are not allowed. Date From cannot be in the future.");
+                        dateFrom.focus();
+                        return;
+                    }
+                    if (dateTo && dateTo.value > todayStr) {
+                        showExperienceError("Future dates are not allowed. Date To cannot be in the future.");
+                        dateTo.focus();
+                        return;
+                    }
+                    if (dateFrom && dateTo && dateFrom.value && dateTo.value && dateTo.value < dateFrom.value) {
+                        showExperienceError("Date To cannot be earlier than Date From.");
+                        dateTo.focus();
                         return;
                     }
                 }
-            }
-            var count = container.children.length + 1;
-            var div = document.createElement('div');
-            div.className = 'experience-card bg-slate-50 p-5 rounded-2xl border border-slate-200 space-y-4';
-            div.innerHTML = '<div class="flex items-center justify-between"><p class="text-xs font-black text-blue-700 uppercase exp-title">EXPERIENCE #' + count + ' <span class="text-red-600 exp-required-mark">*</span></p><button type="button" class="remove-experience-btn text-red-600 text-xs font-bold hover:underline">\u2715 Remove</button></div>' +
-                '<div class="grid grid-cols-1 sm:grid-cols-4 gap-4 text-xs">' +
-                '<div><label class="block font-bold text-slate-700 mb-1">PRINCIPAL NAME</label><input type="text" name="principal_name[]" placeholder="e.g. Evergreen Marine" class="w-full p-2.5 rounded-xl border border-slate-300"></div>' +
-                '<div><label class="block font-bold text-slate-700 mb-1">VESSEL NAME <span class="text-red-600 exp-required-mark">*</span></label><input type="text" name="vessel_name[]" required placeholder="e.g. M/V Star" class="w-full p-2.5 rounded-xl border border-slate-300 exp-req"></div>' +
-                '<div><label class="block font-bold text-slate-700 mb-1">FLAG</label><input type="text" name="vessel_flag[]" placeholder="e.g. Panama" class="w-full p-2.5 rounded-xl border border-slate-300"></div>' +
-                '<div><label class="block font-bold text-slate-700 mb-1">NATIONALITY</label><input type="text" name="vessel_nat[]" placeholder="e.g. Japanese" class="w-full p-2.5 rounded-xl border border-slate-300"></div>' +
-                '<div><label class="block font-bold text-slate-700 mb-1">MANNING AGENCY</label><input type="text" name="manning_agency[]" placeholder="Agency" class="w-full p-2.5 rounded-xl border border-slate-300"></div>' +
-                '<div><label class="block font-bold text-slate-700 mb-1">RANK <span class="text-red-600 exp-required-mark">*</span></label><input type="text" name="exp_rank[]" required placeholder="Rank" class="w-full p-2.5 rounded-xl border border-slate-300 exp-req"></div>' +
-                '<div><label class="block font-bold text-slate-700 mb-1">VESSEL TYPE</label><input type="text" name="vessel_type[]" placeholder="Vessel Type" class="w-full p-2.5 rounded-xl border border-slate-300"></div>' +
-                '<div><label class="block font-bold text-slate-700 mb-1">GRT</label><input type="text" name="vessel_grt[]" placeholder="GRT" class="w-full p-2.5 rounded-xl border border-slate-300"></div>' +
-                '<div><label class="block font-bold text-slate-700 mb-1">KW/BHP</label><input type="text" name="engine_power[]" placeholder="KW/BHP" class="w-full p-2.5 rounded-xl border border-slate-300"></div>' +
-                '<div><label class="block font-bold text-slate-700 mb-1">SALARY (USD)</label><input type="text" name="salary[]" placeholder="Salary" class="w-full p-2.5 rounded-xl border border-slate-300"></div>' +
-                '<div><label class="block font-bold text-slate-700 mb-1">DATE FROM <span class="text-red-600 exp-required-mark">*</span></label><input type="date" name="date_from[]" required class="w-full p-2.5 rounded-xl border border-slate-300 exp-req"></div>' +
-                '<div><label class="block font-bold text-slate-700 mb-1">DATE TO</label><input type="date" name="date_to[]" class="w-full p-2.5 rounded-xl border border-slate-300"></div>' +
-                '</div>';
-            var removeBtn2 = div.querySelector('.remove-experience-btn');
-            removeBtn2.addEventListener('click', function() {
-                if (confirm('Remove this sea service entry?')) { div.remove(); renumberExperiences(); }
-            });
-            container.appendChild(div);
-        }
 
-        function clearOrRemoveFirstExp(btn) {
-            var card = btn.closest('.experience-card');
-            var inputs = card.querySelectorAll('input');
-            inputs.forEach(function(input) { input.value = ''; });
-        }
+                const count = container.children.length + 1;
+                const div = document.createElement('div');
+                div.className = 'bg-slate-50 p-5 rounded-2xl border border-slate-200 space-y-4';
 
-        function renumberExperiences() {
-            var cards = document.querySelectorAll('#experienceContainer > .experience-card');
-            cards.forEach(function(card, index) {
-                var title = card.querySelector('.exp-title');
-                if (title) { title.innerHTML = 'EXPERIENCE #' + (index + 1) + ' <span class="text-red-600 exp-required-mark">*</span>'; }
-            });
-        }
+                div.innerHTML = `
+                    <div class="flex items-center justify-between">
+                        <p class="text-xs font-black text-blue-700 uppercase">
+                            EXPERIENCE #${count} <span class="text-red-600">*</span>
+                        </p>
+                        <button type="button" class="remove-experience-btn text-red-600 text-xs font-bold hover:underline">
+                            ✕ Remove
+                        </button>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-4 gap-4 text-xs">
+
+                        <div>
+                            <label class="block font-bold text-slate-700 mb-1">PRINCIPAL NAME</label>
+                            <input type="text" name="principal_name[]" placeholder="e.g. Evergreen" class="w-full p-2.5 rounded-xl border border-slate-300">
+                        </div>
+
+                        <div>
+                            <label class="block font-bold text-slate-700 mb-1">VESSEL NAME *</label>
+                            <input type="text" name="vessel_name[]" required placeholder="e.g. M/V Star" class="w-full p-2.5 rounded-xl border border-slate-300">
+                        </div>
+
+                        <div>
+                            <label class="block font-bold text-slate-700 mb-1">FLAG</label>
+                            <input type="text" name="vessel_flag[]" placeholder="e.g. Panama" class="w-full p-2.5 rounded-xl border border-slate-300">
+                        </div>
+
+                        <div>
+                            <label class="block font-bold text-slate-700 mb-1">NATIONALITY</label>
+                            <input type="text" name="vessel_nat[]" placeholder="e.g. Japanese" class="w-full p-2.5 rounded-xl border border-slate-300">
+                        </div>
+
+                        <div>
+                            <label class="block font-bold text-slate-700 mb-1">MANNING AGENCY</label>
+                            <input type="text" name="manning_agency[]" placeholder="Agency" class="w-full p-2.5 rounded-xl border border-slate-300">
+                        </div>
+
+                        <div>
+                            <label class="block font-bold text-slate-700 mb-1">RANK</label>
+                            <input type="text" name="exp_rank[]" placeholder="Rank" class="w-full p-2.5 rounded-xl border border-slate-300">
+                        </div>
+
+                        <div>
+                            <label class="block font-bold text-slate-700 mb-1">VESSEL TYPE</label>
+                            <input type="text" name="vessel_type[]" placeholder="Vessel Type" class="w-full p-2.5 rounded-xl border border-slate-300">
+                        </div>
+
+                        <div>
+                            <label class="block font-bold text-slate-700 mb-1">GRT</label>
+                            <input type="text" name="vessel_grt[]" placeholder="GRT" class="w-full p-2.5 rounded-xl border border-slate-300">
+                        </div>
+
+                        <div>
+                            <label class="block font-bold text-slate-700 mb-1">KW/BHP</label>
+                            <input type="text" name="engine_power[]" placeholder="KW/BHP" class="w-full p-2.5 rounded-xl border border-slate-300">
+                        </div>
+
+                        <div>
+                            <label class="block font-bold text-slate-700 mb-1">SALARY (USD)</label>
+                            <input type="text" name="salary[]" placeholder="Salary" class="w-full p-2.5 rounded-xl border border-slate-300">
+                        </div>
+
+                        <div>
+                            <label class="block font-bold text-slate-700 mb-1">DATE FROM</label>
+                            <input type="date" name="date_from[]" max="${TODAY_DATE}" onchange="syncExperienceDateConstraints(this)" oninput="syncExperienceDateConstraints(this)" class="w-full p-2.5 rounded-xl border border-slate-300">
+                        </div>
+
+                        <div>
+                            <label class="block font-bold text-slate-700 mb-1">DATE TO</label>
+                            <input type="date" name="date_to[]" max="${TODAY_DATE}" onchange="syncExperienceDateConstraints(this)" oninput="syncExperienceDateConstraints(this)" class="w-full p-2.5 rounded-xl border border-slate-300">
+                        </div>
+
+                    </div>
+                        `;
+
+                        const removeBtn = div.querySelector('.remove-experience-btn');
+                        removeBtn.addEventListener('click', function() {
+                            openRemoveConfirmModal(div, 'experience');
+                        });
+
+                        div.querySelectorAll('input[name="date_from[]"], input[name="date_to[]"]').forEach(input => {
+                            input.setAttribute('max', TODAY_DATE);
+                            input.addEventListener('change', function() { syncExperienceDateConstraints(this); });
+                            input.addEventListener('input', function() { syncExperienceDateConstraints(this); });
+                        });
+
+                        container.appendChild(div);
+                    }
+
+                    function renumberExperiences() {
+                        const container = document.getElementById('experienceContainer');
+                        const cards = container.children;
+                        for (let i = 0; i < cards.length; i++) {
+                            const numberLabel = cards[i].querySelector('p');
+                            if (numberLabel && numberLabel.textContent.includes('EXPERIENCE #')) {
+                                numberLabel.innerHTML = `EXPERIENCE #${i + 1} <span class="text-red-600">*</span>`;
+                            }
+                        }
+                    }
 
         // ============ REVIEW TABS ============
 
-        var reviewTabs = ['personal', 'documents', 'shipboard'];
-        var currentReviewTab = 'personal';
+        const reviewTabs = ['personal', 'documents', 'shipboard'];
+        let currentReviewTab = 'personal';
 
         function showReviewTab(tabName) {
             currentReviewTab = tabName;
-            reviewTabs.forEach(function(t) {
-                var btn = document.getElementById('reviewTabBtn-' + t);
-                var content = document.getElementById('reviewTabContent-' + t);
+
+            reviewTabs.forEach(t => {
+                const btn = document.getElementById('reviewTabBtn-' + t);
+                const content = document.getElementById('reviewTabContent-' + t);
                 if (t === tabName) {
                     btn.classList.add('bg-blue-600', 'text-white');
                     btn.classList.remove('bg-slate-200', 'text-slate-700', 'hover:bg-slate-300');
@@ -2082,9 +1938,10 @@ $todayDate = date('Y-m-d');
                     content.classList.add('hidden');
                 }
             });
-            var nextBtn = document.getElementById('reviewNextBtn');
+
+            const nextBtn = document.getElementById('reviewNextBtn');
             if (tabName === 'shipboard') {
-                nextBtn.textContent = 'SUBMIT APPLICATION NOW \u2713';
+                nextBtn.textContent = 'SUBMIT APPLICATION NOW ✓';
                 nextBtn.classList.remove('bg-slate-200', 'text-slate-800', 'hover:bg-slate-300');
                 nextBtn.classList.add('bg-emerald-600', 'text-white', 'hover:bg-emerald-700');
             } else {
@@ -2092,64 +1949,257 @@ $todayDate = date('Y-m-d');
                 nextBtn.classList.remove('bg-emerald-600', 'text-white', 'hover:bg-emerald-700');
                 nextBtn.classList.add('bg-slate-200', 'text-slate-800', 'hover:bg-slate-300');
             }
+
             window.scrollTo({ top: 0, behavior: 'smooth' });
         }
 
         function nextReviewTab() {
-            var idx = reviewTabs.indexOf(currentReviewTab);
+            const idx = reviewTabs.indexOf(currentReviewTab);
             if (idx < reviewTabs.length - 1) {
                 showReviewTab(reviewTabs[idx + 1]);
             } else {
+                // Final tab — ask for confirmation before submitting
                 openConfirmModal();
             }
         }
 
         function openConfirmModal() {
+            // Re-check expiry dates one last time before the final "are you
+            // sure" prompt. Expired / near-expiring documents are surfaced again
+            // as a reminder, then the applicant continues to the confirmation.
+            const { expired, nearExpiring } = collectExpiryWarnings();
+            const flagged = expired.concat(nearExpiring);
+
+            if (flagged.length > 0) {
+                showExpiryWarnings(flagged, () => {
+                    document.getElementById('confirmSubmitModal').classList.remove('hidden');
+                });
+                return;
+            }
+
             document.getElementById('confirmSubmitModal').classList.remove('hidden');
         }
+        
 
         function closeConfirmModal() {
             document.getElementById('confirmSubmitModal').classList.add('hidden');
         }
 
         function confirmSubmitApplication() {
-            if (isSubmitting) return;
-            var submitBtn = document.querySelector('#confirmSubmitModal button.bg-emerald-600');
-            if (submitBtn) {
-                submitBtn.disabled = true;
-                submitBtn.textContent = 'Submitting...';
-                submitBtn.classList.add('opacity-75', 'cursor-not-allowed');
-            }
-            isSubmitting = true;
-            if (typeof clearFormDraft === 'function') {
-                clearFormDraft();
-            }
             closeConfirmModal();
             document.getElementById('seafarerForm').requestSubmit();
         }
 
         function editCurrentReviewTab() {
-            if (currentReviewTab === 'personal') goToStep('personal');
-            else if (currentReviewTab === 'documents') goToStep('documents');
-            else if (currentReviewTab === 'shipboard') goToStep('shipboard');
+            goToStep(currentReviewTab);
+        }
+
+
+        // ================= REMOVE CONFIRMATION MODAL =================
+
+        let itemPendingRemoval = null;
+        let itemPendingRemovalType = '';
+
+        function openRemoveConfirmModal(element, type) {
+
+            itemPendingRemoval = element;
+            itemPendingRemovalType = type;
+
+            const message = document.getElementById('removeConfirmMessage');
+
+            if (type === 'certificate') {
+                message.textContent =
+                    'Are you sure you want to remove this certificate? This action cannot be undone.';
+            } else if (type === 'experience') {
+                message.textContent =
+                    'Are you sure you want to remove this experience? This action cannot be undone.';
+            }
+
+            document.getElementById('removeConfirmModal').classList.remove('hidden');
+        }
+
+        function closeRemoveConfirmModal() {
+
+            document.getElementById('removeConfirmModal').classList.add('hidden');
+
+            itemPendingRemoval = null;
+            itemPendingRemovalType = '';
+        }
+
+        function confirmRemoveItem() {
+
+            if (!itemPendingRemoval) {
+                closeRemoveConfirmModal();
+                return;
+            }
+
+            itemPendingRemoval.remove();
+
+            if (itemPendingRemovalType === 'certificate') {
+                checkTrainingLimit();
+            }
+
+            if (itemPendingRemovalType === 'experience') {
+                renumberExperiences();
+            }
+
+            closeRemoveConfirmModal();
+        }
+
+        // Forces typed letters to CAPITAL while keeping the cursor in place.
+        function forceUppercase(input) {
+            const start = input.selectionStart, end = input.selectionEnd;
+            input.value = input.value.toUpperCase();
+            input.setSelectionRange(start, end);
+        }
+
+        // ================= NO EXPIRY TOGGLE =================
+        // When "No Expiry" is ticked for a document, its date field is cleared
+        // and disabled so it's excluded from both the expiry check below and
+        // the submitted form data.
+        function toggleNoExpiry(checkbox, dateFieldId) {
+            const dateField = document.getElementById(dateFieldId);
+            if (!dateField) return;
+
+            dateField.disabled = checkbox.checked;
+            dateField.classList.toggle('bg-slate-100', checkbox.checked);
+            dateField.classList.toggle('text-slate-400', checkbox.checked);
+            if (checkbox.checked) dateField.value = '';
+        }
+
+        // Training certificate rows are dynamic, so the paired date field is
+        // found relative to the checkbox's own row instead of by a fixed id.
+        function toggleTrainingNoExpiry(checkbox) {
+            const row = checkbox.closest('.grid');
+            const dateField = row ? row.querySelector('input[name="training_expiry[]"]') : null;
+            if (!dateField) return;
+
+            dateField.disabled = checkbox.checked;
+            dateField.classList.toggle('bg-slate-100', checkbox.checked);
+            dateField.classList.toggle('text-slate-400', checkbox.checked);
+            if (checkbox.checked) dateField.value = '';
+        }
+
+        // ================= DOCUMENT EXPIRY WARNING =================
+        // Checked once, right before leaving the Documents step (see
+        // goToNextStep), instead of while the applicant is still typing a
+        // date. Returns null for a date that's blank, incomplete, or fine;
+        // otherwise a short status describing the problem.
+        function getExpiryStatus(value) {
+            if (!value) return null;
+
+            const expiry = new Date(value + 'T00:00:00');
+            if (isNaN(expiry.getTime())) return null;
+
+            // "Today" in Philippine Time, regardless of the device's timezone
+            const today = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Manila' }));
+            today.setHours(0, 0, 0, 0);
+
+            const oneYearFromNow = new Date(today);
+            oneYearFromNow.setFullYear(oneYearFromNow.getFullYear() + 1);
+
+            if (expiry < today) return { statusText: 'has already EXPIRED', isExpired: true };
+            if (expiry <= oneYearFromNow) return { statusText: 'is near expiring (within 1 year)', isExpired: false };
+            return null;
+        }
+
+        // Scans every document expiry field on the Documents step and sorts
+        // the flagged ones into "expired" (blocks progress) and "nearExpiring"
+        // (just a heads-up). Fields that are blank or marked "No Expiry"
+        // (disabled) are skipped entirely.
+        function collectExpiryWarnings() {
+            const expired = [];
+            const nearExpiring = [];
+
+            const addResult = (label, status) => {
+                (status.isExpired ? expired : nearExpiring).push({ label, ...status });
+            };
+
+            const staticFields = [
+                { id: 'passport_expiry', label: 'Passport' },
+                { id: 'sirb_expiry', label: "Seaman's Book (SIRB)" },
+                { id: 'goc_expiry', label: 'GOC License' },
+                { id: 'coc_expiry', label: 'COC / License' },
+            ];
+
+            staticFields.forEach(f => {
+                const field = document.getElementById(f.id);
+                if (!field || field.disabled) return;
+                const status = getExpiryStatus(field.value);
+                if (status) addResult(f.label, status);
+            });
+
+            document.querySelectorAll('#trainingContainer input[name="training_expiry[]"]').forEach(field => {
+                if (field.disabled) return;
+                const row = field.closest('.grid');
+                const nameInput = row ? row.querySelector('input[name="training_name[]"]') : null;
+                const label = (nameInput && nameInput.value.trim()) ? nameInput.value.trim() : 'Training Certificate';
+                const status = getExpiryStatus(field.value);
+                if (status) addResult(label, status);
+            });
+
+            return { expired, nearExpiring };
+        }
+
+        // Holds whatever navigation should happen once the applicant
+        // acknowledges the warning modal (see goToNextStep / closeExpiryAlert).
+                let pendingExpiryProceed = null;
+
+        function showExpiryWarnings(warnings, onProceed) {
+            const isAnyExpired = warnings.some(w => w.isExpired);
+
+            document.getElementById('expiryAlertTitle').textContent =
+                warnings.length === 1
+                    ? (warnings[0].isExpired ? 'Document Expired' : 'Document Near Expiry')
+                    : 'Document Expiry Warning';
+
+            // Bulleted, left-aligned list (one bullet per document)
+            document.getElementById('expiryAlertMessage').innerHTML =
+                '<ul class="list-disc pl-5 space-y-1 text-left">' +
+                warnings.map(w => `<li><strong>${w.label}</strong> ${w.statusText}.</li>`).join('') +
+                '</ul>';
+
+            const icon = document.getElementById('expiryAlertIcon');
+            if (isAnyExpired) {
+                icon.classList.remove('bg-amber-100', 'text-amber-600');
+                icon.classList.add('bg-red-100', 'text-red-600');
+                icon.textContent = '✕';
+            } else {
+                icon.classList.remove('bg-red-100', 'text-red-600');
+                icon.classList.add('bg-amber-100', 'text-amber-600');
+                icon.textContent = '⚠';
+            }
+
+            pendingExpiryProceed = onProceed || null;
+            document.getElementById('expiryAlertModal').classList.remove('hidden');
+        }
+
+        function closeExpiryAlert() {
+            document.getElementById('expiryAlertModal').classList.add('hidden');
+            const proceed = pendingExpiryProceed;
+            pendingExpiryProceed = null;
+            if (typeof proceed === 'function') proceed();
         }
 
         // Builds one label/value block
         function reviewField(label, value) {
-            var hasValue = value && value.toString().trim() !== '';
-            return '<div>' +
-                '<p class="text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1">' + label + '</p>' +
-                '<p class="text-sm ' + (hasValue ? 'font-semibold text-slate-800' : 'font-normal italic text-slate-400') + '">' + (hasValue ? value : 'Not provided') + '</p>' +
-                '</div>';
+            const hasValue = value && value.toString().trim() !== '';
+            return `
+                <div>
+                    <p class="text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1">${label}</p>
+                    <p class="text-sm ${hasValue ? 'font-semibold text-slate-800' : 'font-normal italic text-slate-400'}">${hasValue ? value : 'Not provided'}</p>
+                </div>
+            `;
         }
 
         function reviewSectionHeader(title) {
-            return '<h3 class="font-black text-slate-900 text-xs sm:text-sm uppercase tracking-wider border-l-4 border-slate-900 pl-3 mb-3">' + title + '</h3>';
+            return `<h3 class="font-black text-slate-900 text-xs sm:text-sm uppercase tracking-wider border-l-4 border-slate-900 pl-3 mb-3">${title}</h3>`;
         }
 
         function populateReview() {
-            var form = document.getElementById('seafarerForm');
-            var formData = new FormData(form);
+            const form = document.getElementById('seafarerForm');
+            const formData = new FormData(form);
+
             populatePersonalReview(formData);
             populateDocumentsReview(formData);
             populateShipboardReview(formData);
@@ -2213,9 +2263,12 @@ $todayDate = date('Y-m-d');
                     ${reviewSectionHeader('CONTACT INFORMATION')}
                     <div class="grid grid-cols-1 sm:grid-cols-4 gap-4">
                         ${reviewField('Email Address', formData.get('email'))}
-                        ${reviewField('Contact Number', formData.get('phone'))}
+                        ${reviewField(
+                            'Contact Number',
+                            `${formData.get('country_code') || ''} ${formData.get('phone') || ''}`.trim()
+                        )}
                         ${reviewField('Civil Status', formData.get('civil_status'))}
-                        ${formData.get('civil_status') === 'Married' ? reviewField("Wife's Name", formData.get('wife_name')) : ''}
+                        ${reviewField("Wife's Name", formData.get('wife_name'))}
                     </div>
                 </div>
 
@@ -2245,17 +2298,6 @@ $todayDate = date('Y-m-d');
 
             document.getElementById('reviewTabContent-personal').innerHTML = html;
         }
-        function formatExpiryReview(dateStr) {
-            if (!dateStr || !dateStr.toString().trim()) return dateStr;
-            var trimmed = dateStr.toString().trim();
-            var expDate = new Date(trimmed);
-            var today = new Date();
-            today.setHours(0, 0, 0, 0);
-            if (!isNaN(expDate.getTime()) && expDate < today) {
-                return trimmed + ' <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-black bg-amber-100 text-amber-800 border border-amber-300 ml-1.5">EXPIRED</span>';
-            }
-            return trimmed;
-        }
 
         function populateDocumentsReview(formData) {
             const trainingNames = formData.getAll('training_name[]');
@@ -2273,25 +2315,13 @@ $todayDate = date('Y-m-d');
                         ${reviewField('Certificate Name', trainingNames[i])}
                         ${reviewField('Certificate No.', trainingNos[i])}
                         ${reviewField('Issue Date', trainingIssues[i])}
-                        ${reviewField('Expiry Date', formatExpiryReview(trainingExpiries[i]))}
+                        ${reviewField('Expiry Date', trainingExpiries[i])}
                     </div>
                 `;
             }
             if (!hasTraining) {
                 trainingHtml = `<p class="text-sm italic text-slate-400">No training certificates added.</p>`;
             }
-
-            const gocNo = (formData.get('goc_no') || '').trim();
-            const gocIssue = (formData.get('goc_issue') || '').trim();
-            const gocExpiry = (formData.get('goc_expiry') || '').trim();
-            const gocPlace = (formData.get('goc_place') || '').trim();
-            const hasGoc = (gocNo !== '' || gocIssue !== '' || gocExpiry !== '' || gocPlace !== '');
-
-            const cocType = (formData.get('coc_type') || '').trim();
-            const cocNo = (formData.get('coc_no') || '').trim();
-            const cocIssue = (formData.get('coc_issue') || '').trim();
-            const cocExpiry = (formData.get('coc_expiry') || '').trim();
-            const hasCoc = (cocType !== '' || cocNo !== '' || cocIssue !== '' || cocExpiry !== '');
 
             const html = `
                 <div>
@@ -2301,28 +2331,29 @@ $todayDate = date('Y-m-d');
                             <p class="sm:col-span-4 text-xs font-black text-blue-700 uppercase">Passport</p>
                             ${reviewField('Document No.', formData.get('passport_no'))}
                             ${reviewField('Issue Date', formData.get('passport_issue'))}
-                            ${reviewField('Expiry Date', formatExpiryReview(formData.get('passport_expiry')))}
+                            ${reviewField('Expiry Date', formData.get('passport_expiry'))}
                             ${reviewField('Place Issued', formData.get('passport_place'))}
                         </div>
                         <div class="grid grid-cols-1 sm:grid-cols-4 gap-4 bg-slate-50 rounded-xl border border-slate-200 p-4">
                             <p class="sm:col-span-4 text-xs font-black text-blue-700 uppercase">Seaman's Book (SIRB)</p>
                             ${reviewField('Document No.', formData.get('sirb_no'))}
                             ${reviewField('Issue Date', formData.get('sirb_issue'))}
-                            ${reviewField('Expiry Date', formatExpiryReview(formData.get('sirb_expiry')))}
+                            ${reviewField('Expiry Date', formData.get('sirb_expiry'))}
                             ${reviewField('Place Issued', formData.get('sirb_place'))}
                         </div>
                         <div class="grid grid-cols-1 sm:grid-cols-4 gap-4 bg-slate-50 rounded-xl border border-slate-200 p-4">
                             <p class="sm:col-span-4 text-xs font-black text-blue-700 uppercase">GOC License</p>
-                            ${hasGoc ? `
-                                ${reviewField('Document No.', gocNo)}
-                                ${reviewField('Issue Date', gocIssue)}
-                                ${reviewField('Expiry Date', formatExpiryReview(gocExpiry))}
-                                ${reviewField('Place Issued', gocPlace)}
-                            ` : `<p class="sm:col-span-4 text-xs italic text-slate-400">No GOC License provided (Not applicable).</p>`}
+                            ${reviewField('Document No.', formData.get('goc_no'))}
+                            ${reviewField('Issue Date', formData.get('goc_issue'))}
+                            ${reviewField('Expiry Date', formData.get('goc_expiry'))}
+                            ${reviewField('Place Issued', formData.get('goc_place'))}
                         </div>
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-50 rounded-xl border border-slate-200 p-4">
-                            <p class="sm:col-span-2 text-xs font-black text-blue-700 uppercase">Seafarer's Identity Document (SID)</p>
-                            ${reviewField('SID Number', formData.get('sid_no'))}
+                        <div class="grid grid-cols-1 sm:grid-cols-4 gap-4 bg-slate-50 rounded-xl border border-slate-200 p-4">
+                            <p class="sm:col-span-4 text-xs font-black text-blue-700 uppercase">SID</p>
+                            ${reviewField('Document No.', formData.get('sid_no'))}
+                            ${reviewField('Issue Date', formData.get('sid_issue'))}
+                            ${reviewField('Expiry Date', formData.get('sid_expiry'))}
+                            ${reviewField('Place Issued', formData.get('sid_place'))}
                         </div>
                     </div>
                 </div>
@@ -2331,13 +2362,11 @@ $todayDate = date('Y-m-d');
 
                 <div>
                     ${reviewSectionHeader('COC / LICENSE')}
-                    <div class="grid grid-cols-1 sm:grid-cols-4 gap-4 bg-slate-50 rounded-xl border border-slate-200 p-4">
-                        ${hasCoc ? `
-                            ${reviewField('License Type', cocType)}
-                            ${reviewField('No.', cocNo)}
-                            ${reviewField('Issue Date', cocIssue)}
-                            ${reviewField('Expiry Date', formatExpiryReview(cocExpiry))}
-                        ` : `<p class="sm:col-span-4 text-xs italic text-slate-400">No COC / License provided (Not applicable).</p>`}
+                    <div class="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                        ${reviewField('License Type', formData.get('coc_type'))}
+                        ${reviewField('No.', formData.get('coc_no'))}
+                        ${reviewField('Issue Date', formData.get('coc_issue'))}
+                        ${reviewField('Expiry Date', formData.get('coc_expiry'))}
                     </div>
                 </div>
 
@@ -2360,59 +2389,96 @@ $todayDate = date('Y-m-d');
 
             document.getElementById('reviewTabContent-documents').innerHTML = html;
         }
-        // === populateShipboardReview (NEW - with cadet mode support) ===
+
         function populateShipboardReview(formData) {
-            var isCadet = formData.get('is_cadet') === '1';
-            var experiencesHtml = '';
-            if (isCadet) {
-                experiencesHtml = '<div class="bg-blue-50 border border-blue-200 rounded-2xl p-5 text-center text-blue-900">' +
-                    '<span class="text-2xl block mb-1">\u2693</span>' +
-                    '<p class="font-bold text-sm">First-Time Applicant / Cadet</p>' +
-                    '<p class="text-xs text-blue-700 mt-1">Applicant has indicated zero prior sea service.</p>' +
-                    '</div>';
-            } else {
-                var principalNames = formData.getAll('principal_name[]');
-                var vesselNames = formData.getAll('vessel_name[]');
-                var vesselFlags = formData.getAll('vessel_flag[]');
-                var vesselNats = formData.getAll('vessel_nat[]');
-                var manningAgencies = formData.getAll('manning_agency[]');
-                var ranks = formData.getAll('exp_rank[]');
-                var vesselTypes = formData.getAll('vessel_type[]');
-                var grts = formData.getAll('vessel_grt[]');
-                var enginePowers = formData.getAll('engine_power[]');
-                var salaries = formData.getAll('salary[]');
-                var datesFrom = formData.getAll('date_from[]');
-                var datesTo = formData.getAll('date_to[]');
-                var validCount = 0;
-                for (var i = 0; i < vesselNames.length; i++) {
-                    if (!vesselNames[i] || vesselNames[i].trim() === '') continue;
-                    validCount++;
-                    experiencesHtml += '<div class="bg-slate-50 rounded-2xl border border-slate-200 p-5 mb-4">' +
-                        '<p class="text-xs font-black text-blue-700 uppercase mb-3">Sea Service #' + validCount + '</p>' +
-                        '<div class="grid grid-cols-1 sm:grid-cols-4 gap-4">' +
-                        reviewField('Vessel Name', vesselNames[i]) +
-                        reviewField('Rank', ranks[i]) +
-                        reviewField('Principal Name', principalNames[i]) +
-                        reviewField('Manning Agency', manningAgencies[i]) +
-                        reviewField('Flag', vesselFlags[i]) +
-                        reviewField('Nationality', vesselNats[i]) +
-                        reviewField('Vessel Type', vesselTypes[i]) +
-                        reviewField('GRT', grts[i]) +
-                        reviewField('KW/BHP', enginePowers[i]) +
-                        reviewField('Salary (USD)', salaries[i]) +
-                        reviewField('Date From', datesFrom[i]) +
-                        reviewField('Date To', datesTo[i]) +
-                        '</div></div>';
-                }
-                if (validCount === 0) {
-                    experiencesHtml = '<p class="text-sm italic text-slate-400">No sea service records provided.</p>';
-                }
+            const principalNames = formData.getAll('principal_name[]');
+            const vesselNames = formData.getAll('vessel_name[]');
+            const vesselFlags = formData.getAll('vessel_flag[]');
+            const vesselNats = formData.getAll('vessel_nat[]');
+            const manningAgencies = formData.getAll('manning_agency[]');
+            const ranks = formData.getAll('exp_rank[]');
+            const vesselTypes = formData.getAll('vessel_type[]');
+            const grts = formData.getAll('vessel_grt[]');
+            const enginePowers = formData.getAll('engine_power[]');
+            const salaries = formData.getAll('salary[]');
+            const datesFrom = formData.getAll('date_from[]');
+            const datesTo = formData.getAll('date_to[]');
+
+            let experiencesHtml = '';
+            for (let i = 0; i < vesselNames.length; i++) {
+                experiencesHtml += `
+                    <div class="bg-slate-50 rounded-2xl border border-slate-200 p-5 mb-4">
+                        <p class="text-xs font-black text-blue-700 uppercase mb-3">Experience #${i + 1}</p>
+                        <div class="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                            ${reviewField('Principal Name', principalNames[i])}
+                            ${reviewField('Vessel Name', vesselNames[i])}
+                            ${reviewField('Flag', vesselFlags[i])}
+                            ${reviewField('Nationality', vesselNats[i])}
+                            ${reviewField('Manning Agency', manningAgencies[i])}
+                            ${reviewField('Rank', ranks[i])}
+                            ${reviewField('Vessel Type', vesselTypes[i])}
+                            ${reviewField('GRT', grts[i])}
+                            ${reviewField('KW/BHP', enginePowers[i])}
+                            ${reviewField('Salary (USD)', salaries[i])}
+                            ${reviewField('Date From', datesFrom[i])}
+                            ${reviewField('Date To', datesTo[i])}
+                        </div>
+                    </div>
+                `;
             }
-            var html = '<div>' + reviewSectionHeader('SEA SERVICE & SHIPBOARD EXPERIENCES') + experiencesHtml + '</div>' +
-                '<hr class="border-slate-200">' +
-                '<div>' + reviewSectionHeader('ADDITIONAL DETAILS') + reviewField('Additional Information', formData.get('additional_details')) + '</div>';
+            if (experiencesHtml === '') {
+                experiencesHtml = `<p class="text-sm italic text-slate-400">No shipboard experience added.</p>`;
+            }
+
+            const html = `
+                <div>
+                    ${reviewSectionHeader('EXPERIENCES')}
+                    ${experiencesHtml}
+                </div>
+
+                <hr class="border-slate-200">
+
+                <div>
+                    ${reviewSectionHeader('ADDITIONAL DETAILS')}
+                    ${reviewField('Additional Details', formData.get('additional_details'))}
+                </div>
+            `;
+
             document.getElementById('reviewTabContent-shipboard').innerHTML = html;
         }
+
+        // ============ SCROLL TO TOP (performance-friendly) ============
+        // Instead of running this logic on every single scroll event (which can
+        // fire far more often than the screen actually repaints and cause jank),
+        // we throttle it with requestAnimationFrame so the check only happens
+        // once per animation frame — this keeps scrolling smooth.
+        function scrollToTop() {
+            window.scrollTo({
+                top: 0,
+                behavior: 'smooth'
+            });
+        }
+
+        let scrollTicking = false;
+
+        function handleScrollTick() {
+            const scrollTopBtn = document.getElementById('scrollTopBtn');
+            if (window.scrollY > 300) {
+                scrollTopBtn.classList.remove('hidden');
+                scrollTopBtn.classList.add('flex');
+            } else {
+                scrollTopBtn.classList.add('hidden');
+                scrollTopBtn.classList.remove('flex');
+            }
+            scrollTicking = false;
+        }
+
+        window.addEventListener('scroll', function() {
+            if (!scrollTicking) {
+                window.requestAnimationFrame(handleScrollTick);
+                scrollTicking = true;
+            }
+        }, { passive: true });
     </script>
 </body>
 </html>
