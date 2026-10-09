@@ -1,15 +1,15 @@
 import React from 'react';
-import containerShipBg from '../assets/images/cargo_container_ship_1785313984424.jpg';
+import containerShipBg from '../assets/images/cargo_container_ship.jpg';
 import { SeafarerFormData } from '../types';
 import { CheckCircle2, FileCheck, Anchor, Printer, RefreshCw, Mail, Phone } from 'lucide-react';
 
 interface SubmissionSuccessPageProps {
   formData: SeafarerFormData;
+  referenceNumber: string;
   onReset: () => void;
 }
 
-export const SubmissionSuccessPage: React.FC<SubmissionSuccessPageProps> = ({ formData, onReset }) => {
-  const referenceNumber = `CSI-${Math.floor(100000 + Math.random() * 900000)}`;
+export const SubmissionSuccessPage: React.FC<SubmissionSuccessPageProps> = ({ formData, referenceNumber, onReset }) => {
   const dateSubmitted = new Date().toLocaleDateString('en-US', {
     year: 'numeric',
     month: 'long',

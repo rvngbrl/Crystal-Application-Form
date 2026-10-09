@@ -11,6 +11,7 @@ export default function App() {
   const [currentStep, setCurrentStep] = useState<Step>('terms');
   const [isPhpGuideOpen, setIsPhpGuideOpen] = useState<boolean>(false);
   const [submittedData, setSubmittedData] = useState<SeafarerFormData | null>(null);
+  const [submittedReference, setSubmittedReference] = useState<string>('');
   const [customLogoUrl, setCustomLogoUrl] = useState<string | null>(() => {
     return localStorage.getItem('csi_custom_logo') || null;
   });
@@ -24,8 +25,28 @@ export default function App() {
     }
   };
 
-  const handleFormSubmit = (data: SeafarerFormData) => {
+  const handleFormSubmit = async (
+    data: SeafarerFormData,
+    attachments: { passport: File | null; seamanBook: File | null; stcw: File | null },
+  ) => {
+    const payload = new FormData();
+    payload.set('application', JSON.stringify(data));
+    Object.entries(attachments).forEach(([name, file]) => {
+      if (file) payload.append(name, file);
+    });
+
+    const response = await fetch('submit_application.php', {
+      method: 'POST',
+      body: payload,
+    });
+    const result = await response.json();
+
+    if (!response.ok) {
+      throw new Error(result.message || 'Your application could not be saved. Please try again.');
+    }
+
     setSubmittedData(data);
+    setSubmittedReference(result.referenceNumber);
     setCurrentStep('submitted');
   };
 
@@ -63,6 +84,7 @@ export default function App() {
         {currentStep === 'submitted' && submittedData && (
           <SubmissionSuccessPage
             formData={submittedData}
+            referenceNumber={submittedReference}
             onReset={() => setCurrentStep('terms')}
           />
         )}
